@@ -1,0 +1,273 @@
+---
+title: "Estimates of Carrying Capacity with Quantile Random Forest Models"
+author:
+  - name: Kevin See
+    affiliation: biomark
+    email: kevin.see@merck.com
+  - name: Mike Ackerman
+    affiliation: Biomark, Inc.
+    email: mike.ackerman@merck.com
+  - name: Richie Carmichael
+    affiliation: Biomark, Inc.
+    email: richard.carmichael@merck.com
+date: '`r format(Sys.Date(), "%B %d, %Y")`'
+output:
+  bookdown::html_document2:
+    theme: simplex
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+    fig_height: 6
+    fig_width: 8
+    pandoc_args:
+    - --lua-filter=../templates/scholarly-metadata.lua
+    - --lua-filter=../templates/author-info-blocks.lua
+    - --lua-filter=../templates/pagebreak.lua
+  bookdown::pdf_document2:
+    pandoc_args:
+    - --lua-filter=../templates/scholarly-metadata.lua
+    - --lua-filter=../templates/author-info-blocks2.lua
+    - --lua-filter=../templates/pagebreak.lua
+    fig_height: 6
+    fig_width: 8
+    includes:
+      in_header: "../templates/header_ABS.tex"
+  bookdown::word_document2: 
+    fig_caption: yes
+    fig_height: 4
+    fig_width: 7
+    toc: yes
+    pandoc_args:
+    - --lua-filter=../templates/scholarly-metadata.lua
+    - --lua-filter=../templates/author-info-blocks.lua
+    - --lua-filter=../templates/pagebreak.lua
+    reference_docx: "../templates/ReportTemplate.docx"
+institute:
+- biomark: Biomark, Inc.
+csl: "../templates/american-fisheries-society.csl"
+# bibliography: references.bib
+---
+
+```{r setup, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+# setwd('writeup')
+# load knitr for markdown
+library(knitr)
+knitr::opts_chunk$set(echo=FALSE, 
+                      warning=FALSE, 
+                      message=FALSE,
+                      fig.path = "../output/figures/")
+#options(tinytex.verbose = TRUE)
+options(knitr.kable.NA = '-')
+options(knitr.table.format = "pandoc")
+
+library(kableExtra)
+```
+
+```{r}
+# load needed packages
+library(tidyverse)
+library(sf)
+library(QRFcapacity)
+
+theme_set(theme_bw())
+```
+
+```{r load-data}
+# QRF model fits and associated data
+load('../data/qrf/qrf_juv_summer_dash.rda')
+
+# geomorphic polygons
+lem_geo_rch = st_read('../data/geo_reaches/Lem_Poly_Label.shp',
+                      quiet = T) %>%
+  mutate(GeoReach = factor(Name,
+                           levels = paste0("GR_", 1:nlevels(Name)))) %>%
+  select(-Name)
+
+pah_geo_rch = st_read('../data/geo_reaches/Pah_Poly_Label.shp',
+                      quiet = T) %>%
+  mutate(GeoReach = factor(GeoReach,
+                           levels = paste0("GR-", 8:10)))
+
+ups_geo_rch = st_read('../data/geo_reaches/US_Poly_Label.shp',
+                      quiet = T) %>%
+  mutate(GeoReach = factor(GeoReach,
+                           levels = paste0("GR-", 4:10)))
+
+# QRF extrapolations in Salmon subbasin on 200 m reaches
+salm_cap = st_read('../data/qrf/salmon_cap.gpkg',
+                   quiet = T) %>%
+  st_transform(st_crs(lem_geo_rch))
+
+```
+
+# Introduction
+
+# QRF Model
+
+The habitat covariates that went into this QRF model are shown in Table \@ref(tab:sel-mets).
+
+```{r sel-mets}
+sel_hab_mets %>%
+  select(Metric) %>%
+  distinct() %>%
+  left_join(hab_dict %>%
+              select(Metric = ShortName,
+                     Name,
+                     MetricCategory,
+                     DescriptiveText)) %>%
+  arrange(MetricCategory,
+          Metric) %>%
+  kable(booktabs = T,
+        caption = 'Selected habitat covariates for QRF model.') %>%
+  kable_styling()
+```
+
+The relative importance of the habitat covariates are shown in Figure \@ref(fig:rel-imp). 
+
+
+```{r rel-imp, fig.cap="Relative importance of each habitat covariate, colored by species."}
+# relative importance of habtiat covariates
+qrf_mods %>%
+  map_df(.id = 'Species',
+         .f = function(x) {
+           as_tibble(x$importance,
+                     rownames = 'Metric') %>%
+             mutate(relImp = IncNodePurity / max(IncNodePurity)) 
+         }) %>%
+  left_join(hab_dict %>%
+              select(Metric = ShortName,
+                     Name)) %>%
+  mutate_at(vars(Metric, Name),
+            list(~ fct_reorder(., relImp))) %>%
+  arrange(Metric) %>%
+  ggplot(aes(x = Name,
+             y = relImp)) +
+  geom_col(aes(fill = Species),
+           position = 'dodge') +
+  scale_fill_brewer(palette = "Set1") +
+  coord_flip() +
+  theme(legend.position = "bottom") +
+  labs(x = 'Metric',
+       y = 'Relative Importance')
+```
+
+```{r rel-imp-v2, eval = F, fig.cap="Relative importance of each habitat covariate, by species."}
+# separate plots by species
+rel_imp_list = qrf_mods %>%
+  map(.f = function(x) {
+    as_tibble(x$importance,
+              rownames = 'Metric') %>%
+      mutate(relImp = IncNodePurity / max(IncNodePurity)) %>%
+      left_join(hab_dict %>%
+                  select(Metric = ShortName,
+                         Name)) %>%
+      mutate_at(vars(Metric, Name),
+                list(~ fct_reorder(., relImp))) %>%
+      arrange(Metric) %>%
+      distinct() %>%
+      ggplot(aes(x = Name,
+                 y = relImp)) +
+      geom_col(fill = 'gray40') +
+      coord_flip() +
+      labs(x = 'Metric',
+           y = 'Relative Importance')
+    
+  })
+# add species name to each plot
+for(i in 1:length(rel_imp_list)) {
+  rel_imp_list[[i]] = rel_imp_list[[i]] +
+    labs(title = names(qrf_mods)[[i]])
+}
+
+all_rel_imp_p = ggpubr::ggarrange(plotlist = rel_imp_list,
+                  nrow = 1,
+                  ncol = 2)
+all_rel_imp_p
+```
+
+Partial dependence plots show the marginal effect of each covariate by displaying the predicted capacity as that covariate changes, assuming all the other covariates remain fixed at their average values. The partial dependence plots are shown for Chinook (Figure \@ref(fig:pdp-chnk)) and steelhead (Figure \@ref(fig:pdp-sthd)).
+
+```{r pdp-chnk, fig.cap = "Partial dependence plots for Chinook QRF model."}
+plot_partial_dependence(qrf_mods[['Chinook']],
+                        qrf_mod_df %>%
+                          filter(Species == 'Chinook'),
+                        data_dict = hab_dict,
+                        log_offset = dens_offset,
+                        scales = 'free') +
+  labs(title = 'Chinook')
+```
+
+```{r pdp-sthd, fig.cap = "Partial dependence plots for steelhead QRF model."}
+plot_partial_dependence(qrf_mods[['Steelhead']],
+                        qrf_mod_df %>%
+                          filter(Species == 'Steelhead'),
+                        data_dict = hab_dict,
+                        log_offset = dens_offset,
+                        scales = 'free') +
+  labs(title = 'Steelhead')
+```
+
+# Geomorphic Reaches
+
+```{r}
+lem_gr_chnk = lem_geo_rch %>%
+  st_join(salm_cap %>%
+            filter(chnk))
+
+lem_gr_sthd = lem_geo_rch %>%
+  st_join(salm_cap %>%
+            filter(sthd))
+
+lem_gr_cap = lem_gr_chnk %>%
+  select(GeoReach, UniqueID, 
+         matches('chnk_per'), 
+         matches('chnk_tot')) %>%
+  full_join(lem_gr_sthd %>%
+              st_drop_geometry() %>%
+              select(GeoReach, UniqueID, 
+                     matches('sthd_per'), 
+                     matches('sthd_tot')))
+
+lem_gr_cap %>%
+  group_by(GeoReach) %>%
+  summarise_at(vars(matches('per_m')),
+               list(mean),
+               na.rm = T) %>%
+  ggplot() +
+  geom_sf(aes(fill = sthd_per_m2)) +
+  scale_fill_viridis_c(direction = -1) +
+  geom_sf_label(aes(label = str_remove(GeoReach, "^GR_")),
+                size = 2,
+                nudge_x = 3000,
+                nudge_y = 500) +
+  theme(axis.text.x = element_text(angle = -45, vjust = 0),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        legend.position = "top")
+
+lem_gr_cap %>%
+  st_drop_geometry() %>%
+  as_tibble() %>%
+  ggplot(aes(x = GeoReach,
+             y = chnk_per_m)) +
+  geom_boxplot(fill = 'lightblue') +
+  # geom_violin(fill = 'lightblue',
+  #             draw_quantiles = c(0.25, 0.5, 0.75)) +
+  labs(x = 'Geomorphic Reach',
+       y = 'Chinook capacity (per m)')
+
+
+lem_gr_cap %>%
+  st_drop_geometry() %>%
+  as_tibble() %>%
+  ggplot(aes(x = GeoReach,
+             y = sthd_per_m2)) +
+  geom_boxplot(fill = 'lightblue') +
+  # geom_violin(fill = 'lightblue',
+  #             draw_quantiles = c(0.25, 0.5, 0.75)) +
+  labs(x = 'Geomorphic Reach',
+       y = 'Steelhead capacity (per m)')
+
+
+```
+
