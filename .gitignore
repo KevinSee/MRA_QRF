@@ -38,3 +38,7 @@ vignettes/*.pdf
 
 # R Environment Variables
 .Renviron
+
+# temporary files created when opening a GeoPackage file
+*.gpkg-shm
+*.gpkg-wal
