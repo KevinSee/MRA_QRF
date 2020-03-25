@@ -68,6 +68,8 @@ library(kableExtra)
 library(tidyverse)
 library(sf)
 library(QRFcapacity)
+library(janitor)
+library(ggpubr)
 
 theme_set(theme_bw())
 ```
@@ -102,9 +104,18 @@ salm_cap = st_read('../data/qrf/salmon_cap.gpkg',
 
 # Introduction
 
-# QRF Model
+## QRF Model
 
-The habitat covariates that went into this QRF model are shown in Table \@ref(tab:sel-mets).
+We developed a quantile random forest (QRF) model with paired fish and habitat data from a number of sites around the Columbia River Basin (Table \@ref(tab:sample-size)). We developed separate QRF models for each species, using the haitat covariates shown in Table \@ref(tab:sel-mets).
+
+```{r sample-size}
+qrf_mod_df %>%
+  tabyl(Watershed, Species) %>%
+  adorn_totals() %>%
+  kable(boottabs = T,
+        caption = 'Number of sites with fish/habtiat data that went into QRF model.') %>%
+  kable_styling()
+```
 
 ```{r sel-mets}
 sel_hab_mets %>%
@@ -123,7 +134,6 @@ sel_hab_mets %>%
 ```
 
 The relative importance of the habitat covariates are shown in Figure \@ref(fig:rel-imp). 
-
 
 ```{r rel-imp, fig.cap="Relative importance of each habitat covariate, colored by species."}
 # relative importance of habtiat covariates
@@ -207,35 +217,92 @@ plot_partial_dependence(qrf_mods[['Steelhead']],
   labs(title = 'Steelhead')
 ```
 
+From this QRF model, we made capacity predictions at every CHaMP site, after averaging the habitat metrics across years for sites visited more than once. We then tied each CHaMP site to a 200 m reach on a stream network with various attributes, and used those attributes to extrapolate capacity to every 200 m reach on that network.
+
+# Methods
+
+## Geomorphic Reaches
+
+We took our QRF extrapolation estimates at each 200 m reach, and determined which reaches fell into each geomorphic reach within each watershed. Then we examined the distribution of capacity estimates within each reach, and the average capacity for each reach.
+
+## Capacity at MRA sites
+
+We used the QRF model to predict capacity at MRA sites that were sampled with DASH in 2018.
+
+# Results
+
 # Geomorphic Reaches
 
+The distribution of capacity predictions within each geomorphic reach is shown in Figure \@ref(fig:violin-p). Figures \@ref(fig:lem-map) are maps depicting the average capacity within each geomorphic reach.
+
 ```{r}
-lem_gr_chnk = lem_geo_rch %>%
-  st_join(salm_cap %>%
-            filter(chnk))
+geo_rch_list = list("Lemhi" = lem_geo_rch,
+                    "Pahsimeroi" = pah_geo_rch,
+                    "Upper Salmon" = ups_geo_rch)
 
-lem_gr_sthd = lem_geo_rch %>%
-  st_join(salm_cap %>%
-            filter(sthd))
+gr_cap = geo_rch_list %>%
+  map(.f = function(x) {
+    x %>%
+      st_join(salm_cap %>%
+            filter(sthd) %>%
+            select(UniqueID, 
+                   matches('sthd_per'), 
+                   matches('sthd_tot')) %>%
+            full_join(salm_cap %>%
+                        filter(chnk) %>%
+                        st_drop_geometry() %>%
+                        select(UniqueID, 
+                               matches('chnk_per'), 
+                               matches('chnk_tot')))) %>%
+      mutate(rch_num = str_extract(GeoReach, '[:digit:]+'),
+             rch_num = as.numeric(rch_num),
+             GeoReach = str_replace(GeoReach, '_', '-')) %>%
+      mutate(GeoReach = factor(GeoReach,
+                           levels = paste0("GR-", min(rch_num):max(rch_num))))
+  })
 
-lem_gr_cap = lem_gr_chnk %>%
-  select(GeoReach, UniqueID, 
-         matches('chnk_per'), 
-         matches('chnk_tot')) %>%
-  full_join(lem_gr_sthd %>%
-              st_drop_geometry() %>%
-              select(GeoReach, UniqueID, 
-                     matches('sthd_per'), 
-                     matches('sthd_tot')))
+# put into data.frame
+gr_cap_df = gr_cap %>%
+  map_df(.id = 'Watershed',
+         .f = function(x) {
+           x %>%
+             st_drop_geometry() %>%
+             as_tibble()
+         }) %>%
+  mutate(GeoReach = factor(GeoReach,
+                           levels = paste0("GR-", min(rch_num):max(rch_num))))
 
-lem_gr_cap %>%
+```
+
+```{r violin-p, fig.cap = "Violin plots showing the distribution of capacity estimates for 200 m reaches within each geomorphic reach in each watershed."}
+gr_cap_df %>%
+  ggplot(aes(x = GeoReach,
+             y = chnk_per_m)) +
+  # geom_boxplot(fill = 'lightblue') +
+  geom_violin(fill = 'lightblue',
+              scale = 'width',
+              draw_quantiles = c(0.25, 0.5, 0.75)) +
+  facet_wrap(~ Watershed,
+             scales = 'free_x',
+             nrow = 1) +
+  labs(x = 'Geomorphic Reach',
+       y = 'Chinook capacity (per m)') +
+  theme(axis.text.x = element_text(angle = -45, vjust = 0))
+
+```
+
+
+```{r lem-map, fig.cap = "Geomorphic reaches in the Lemhi colored by average capacity (fish per m). Note different scales for each species."}
+lem_chnk_map = gr_cap$Lemhi %>%
   group_by(GeoReach) %>%
   summarise_at(vars(matches('per_m')),
                list(mean),
                na.rm = T) %>%
+  ungroup() %>%
   ggplot() +
-  geom_sf(aes(fill = sthd_per_m2)) +
-  scale_fill_viridis_c(direction = -1) +
+  geom_sf(aes(fill = chnk_per_m)) +
+  scale_fill_viridis_c(direction = -1,
+                       name = 'Capacity per m') +
   geom_sf_label(aes(label = str_remove(GeoReach, "^GR_")),
                 size = 2,
                 nudge_x = 3000,
@@ -243,31 +310,128 @@ lem_gr_cap %>%
   theme(axis.text.x = element_text(angle = -45, vjust = 0),
         axis.title.x = element_blank(),
         axis.title.y = element_blank(),
-        legend.position = "top")
+        legend.position = "bottom") +
+  labs(title = 'Chinook')
 
-lem_gr_cap %>%
-  st_drop_geometry() %>%
-  as_tibble() %>%
-  ggplot(aes(x = GeoReach,
-             y = chnk_per_m)) +
-  geom_boxplot(fill = 'lightblue') +
-  # geom_violin(fill = 'lightblue',
-  #             draw_quantiles = c(0.25, 0.5, 0.75)) +
-  labs(x = 'Geomorphic Reach',
-       y = 'Chinook capacity (per m)')
+lem_sthd_map = gr_cap$Lemhi %>%
+  group_by(GeoReach) %>%
+  summarise_at(vars(matches('per_m')),
+               list(mean),
+               na.rm = T) %>%
+  ungroup() %>%
+  ggplot() +
+  geom_sf(aes(fill = sthd_per_m)) +
+  scale_fill_viridis_c(direction = -1,
+                       name = 'Capacity per m') +
+  geom_sf_label(aes(label = str_remove(GeoReach, "^GR_")),
+                size = 2,
+                nudge_x = 3000,
+                nudge_y = 500) +
+  theme(axis.text.x = element_text(angle = -45, vjust = 0),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        legend.position = "bottom") +
+  labs(title = 'Steelhead')
 
-
-lem_gr_cap %>%
-  st_drop_geometry() %>%
-  as_tibble() %>%
-  ggplot(aes(x = GeoReach,
-             y = sthd_per_m2)) +
-  geom_boxplot(fill = 'lightblue') +
-  # geom_violin(fill = 'lightblue',
-  #             draw_quantiles = c(0.25, 0.5, 0.75)) +
-  labs(x = 'Geomorphic Reach',
-       y = 'Steelhead capacity (per m)')
-
+ggarrange(plotlist = list(lem_chnk_map,
+                          lem_sthd_map),
+          labels = 'AUTO',
+          nrow = 1)
 
 ```
 
+```{r pah-map, fig.cap = "Geomorphic reaches in the Pahsimeroi colored by average capacity (fish per m). Note different scales for each species."}
+pah_chnk_map = gr_cap$Pahsimeroi %>%
+  group_by(GeoReach) %>%
+  summarise_at(vars(matches('per_m')),
+               list(mean),
+               na.rm = T) %>%
+  ungroup() %>%
+  ggplot() +
+  geom_sf(aes(fill = chnk_per_m)) +
+  scale_fill_viridis_c(direction = -1,
+                       name = 'Capacity per m') +
+  geom_sf_label(aes(label = str_remove(GeoReach, "^GR_")),
+                size = 2,
+                nudge_x = 3000,
+                nudge_y = 500) +
+  theme(axis.text.x = element_text(angle = -45, vjust = 0),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        legend.position = "bottom") +
+  labs(title = 'Chinook')
+
+pah_sthd_map = gr_cap$Pahsimeroi %>%
+  group_by(GeoReach) %>%
+  summarise_at(vars(matches('per_m')),
+               list(mean),
+               na.rm = T) %>%
+  ungroup() %>%
+  ggplot() +
+  geom_sf(aes(fill = sthd_per_m)) +
+  scale_fill_viridis_c(direction = -1,
+                       name = 'Capacity per m') +
+  geom_sf_label(aes(label = str_remove(GeoReach, "^GR_")),
+                size = 2,
+                nudge_x = 3000,
+                nudge_y = 500) +
+  theme(axis.text.x = element_text(angle = -45, vjust = 0),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        legend.position = "bottom") +
+  labs(title = 'Steelhead')
+
+ggarrange(plotlist = list(pah_chnk_map,
+                          pah_sthd_map),
+          labels = 'AUTO',
+          nrow = 1)
+
+```
+
+```{r ups-map, fig.cap = "Geomorphic reaches in the upper Salmon colored by average capacity (fish per m). Note different scales for each species."}
+ups_chnk_map = gr_cap$`Upper Salmon` %>%
+  group_by(GeoReach) %>%
+  summarise_at(vars(matches('per_m')),
+               list(mean),
+               na.rm = T) %>%
+  ungroup() %>%
+  ggplot() +
+  geom_sf(aes(fill = chnk_per_m)) +
+  scale_fill_viridis_c(direction = -1,
+                       name = 'Capacity per m') +
+  geom_sf_label(aes(label = str_remove(GeoReach, "^GR_")),
+                size = 2,
+                nudge_x = 3000,
+                nudge_y = 500) +
+  theme(axis.text.x = element_text(angle = -45, vjust = 0),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        legend.position = "bottom") +
+  labs(title = 'Chinook')
+
+ups_sthd_map = gr_cap$`Upper Salmon` %>%
+  group_by(GeoReach) %>%
+  summarise_at(vars(matches('per_m')),
+               list(mean),
+               na.rm = T) %>%
+  ungroup() %>%
+  ggplot() +
+  geom_sf(aes(fill = sthd_per_m)) +
+  scale_fill_viridis_c(direction = -1,
+                       name = 'Capacity per m') +
+  geom_sf_label(aes(label = str_remove(GeoReach, "^GR_")),
+                size = 2,
+                nudge_x = 3000,
+                nudge_y = 500) +
+  theme(axis.text.x = element_text(angle = -45, vjust = 0),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        legend.position = "bottom") +
+  labs(title = 'Steelhead')
+
+ggarrange(plotlist = list(ups_chnk_map,
+                          ups_sthd_map),
+          labels = 'AUTO',
+          nrow = 1)
+
+```
