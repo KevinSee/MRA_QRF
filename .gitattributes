@@ -1,1 +1,2 @@
 *.dbf filter=lfs diff=lfs merge=lfs -text
+data/qrf/salmon_cap.gpkg filter=lfs diff=lfs merge=lfs -text
