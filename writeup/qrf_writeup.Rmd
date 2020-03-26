@@ -236,9 +236,12 @@ We used the QRF model to predict capacity at MRA sites that were sampled with DA
 The distribution of capacity predictions within each geomorphic reach is shown in Figure \@ref(fig:violin-p). Figures \@ref(fig:lem-map) are maps depicting the average capacity within each geomorphic reach.
 
 ```{r}
-geo_rch_list = list("Lemhi" = lem_geo_rch,
-                    "Pahsimeroi" = pah_geo_rch,
-                    "Upper Salmon" = ups_geo_rch)
+geo_rch_list = list("Lemhi" = lem_geo_rch %>%
+                      mutate(Watershed = 'Lemhi'),
+                    "Pahsimeroi" = pah_geo_rch %>%
+                      mutate(Watershed = 'Pahsimeroi'),
+                    "Upper Salmon" = ups_geo_rch %>%
+                      mutate(Watershed = 'Upper Salmon'))
 
 gr_cap = geo_rch_list %>%
   map(.f = function(x) {
@@ -246,14 +249,19 @@ gr_cap = geo_rch_list %>%
       st_join(salm_cap %>%
             filter(sthd) %>%
             select(UniqueID, 
+                   GNIS_Name,
                    matches('sthd_per'), 
                    matches('sthd_tot')) %>%
             full_join(salm_cap %>%
                         filter(chnk) %>%
                         st_drop_geometry() %>%
                         select(UniqueID, 
+                               GNIS_Name,
                                matches('chnk_per'), 
                                matches('chnk_tot')))) %>%
+      filter((Watershed == 'Lemhi' & GNIS_Name == 'Lemhi River') |
+               (Watershed == 'Pahsimeroi' & GNIS_Name == 'Pahsimeroi River') |
+               (Watershed == 'Upper Salmon' & GNIS_Name == 'Salmon River')) %>%
       mutate(rch_num = str_extract(GeoReach, '[:digit:]+'),
              rch_num = as.numeric(rch_num),
              GeoReach = str_replace(GeoReach, '_', '-')) %>%
@@ -263,7 +271,7 @@ gr_cap = geo_rch_list %>%
 
 # put into data.frame
 gr_cap_df = gr_cap %>%
-  map_df(.id = 'Watershed',
+  map_df(.id = NULL,
          .f = function(x) {
            x %>%
              st_drop_geometry() %>%
