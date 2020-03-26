@@ -233,7 +233,7 @@ We used the QRF model to predict capacity at MRA sites that were sampled with DA
 
 # Geomorphic Reaches
 
-The distribution of capacity predictions within each geomorphic reach is shown in Figure \@ref(fig:violin-p). Figures \@ref(fig:lem-map) are maps depicting the average capacity within each geomorphic reach.
+The distribution of capacity predictions within each geomorphic reach is shown in Figures \@ref(fig:chnk-violin-p) and \@ref(fig:sthd-violin-p). Figures \@ref(fig:lem-map), \@ref(fig:pah-map) and \@ref(fig:ups-map) are maps depicting the average capacity within each geomorphic reach.
 
 ```{r}
 geo_rch_list = list("Lemhi" = lem_geo_rch %>%
@@ -282,7 +282,7 @@ gr_cap_df = gr_cap %>%
 
 ```
 
-```{r violin-p, fig.cap = "Violin plots showing the distribution of capacity estimates for 200 m reaches within each geomorphic reach in each watershed."}
+```{r chnk-violin-p, fig.cap = "Violin plots showing the distribution of Chinook capacity estimates for 200 m reaches within each geomorphic reach in each watershed."}
 gr_cap_df %>%
   ggplot(aes(x = GeoReach,
              y = chnk_per_m)) +
@@ -295,6 +295,23 @@ gr_cap_df %>%
              nrow = 1) +
   labs(x = 'Geomorphic Reach',
        y = 'Chinook capacity (per m)') +
+  theme(axis.text.x = element_text(angle = -45, vjust = 0))
+
+```
+
+```{r sthd-violin-p, fig.cap = "Violin plots showing the distribution of steelhead capacity estimates for 200 m reaches within each geomorphic reach in each watershed."}
+gr_cap_df %>%
+  ggplot(aes(x = GeoReach,
+             y = sthd_per_m)) +
+  # geom_boxplot(fill = 'lightblue') +
+  geom_violin(fill = 'lightblue',
+              scale = 'width',
+              draw_quantiles = c(0.25, 0.5, 0.75)) +
+  facet_wrap(~ Watershed,
+             scales = 'free_x',
+             nrow = 1) +
+  labs(x = 'Geomorphic Reach',
+       y = 'Steelhead capacity (per m)') +
   theme(axis.text.x = element_text(angle = -45, vjust = 0))
 
 ```
