@@ -250,6 +250,7 @@ gr_cap = geo_rch_list %>%
             filter(sthd) %>%
             select(UniqueID, 
                    GNIS_Name,
+                   model,
                    matches('sthd_per'), 
                    matches('sthd_tot')) %>%
             full_join(salm_cap %>%
@@ -257,6 +258,7 @@ gr_cap = geo_rch_list %>%
                         st_drop_geometry() %>%
                         select(UniqueID, 
                                GNIS_Name,
+                               model,
                                matches('chnk_per'), 
                                matches('chnk_tot')))) %>%
       filter((Watershed == 'Lemhi' & GNIS_Name == 'Lemhi River') |
