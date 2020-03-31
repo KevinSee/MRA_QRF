@@ -545,10 +545,26 @@ for(i in seq_along(map_list)) {
 }
 dev.off()
 
-ggarrange(plotlist = map_list,
-          nrow = 2,
-          ncol = 2,
-          common.legend = T,
-          legend = 'bottom')
+# ggarrange(plotlist = map_list,
+#           nrow = 2,
+#           ncol = 2,
+#           common.legend = T,
+#           legend = 'bottom')
+
 ```
 
+```{r qrf-upl-map}
+map_list[["UpperLemhi_2018"]]
+```
+
+```{r qrf-pah-map}
+map_list[["Pahsimeroi_2018"]]
+```
+
+```{r qrf-lwl-map}
+map_list[["LowerLemhi_2018"]]
+```
+
+```{r qrf-usl-map}
+map_list[["UpperSalmon_2018"]]
+```
