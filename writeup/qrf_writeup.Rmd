@@ -78,6 +78,9 @@ theme_set(theme_bw())
 # QRF model fits and associated data
 load('../data/qrf/qrf_juv_summer_dash.rda')
 
+# DASH data from 2018
+load('../data/dash/dash2018_fr.rda')
+
 # geomorphic polygons
 lem_geo_rch = st_read('../data/geo_reaches/Lem_Poly_Label.shp',
                       quiet = T) %>%
@@ -101,6 +104,57 @@ salm_cap = st_read('../data/qrf/salmon_cap.gpkg',
   st_transform(st_crs(lem_geo_rch))
 
 ```
+
+```{r cap-pred-mra-rchs} 
+pred_sf = dash2018_fr %>%
+  ungroup() %>%
+  rename(avg_aug_temp = S2_02_11,
+         LWVol_Wet = Wod_Vlm,
+         Q = MeanU_v1,
+         Sin_CL = sin,
+         SlowWater_Pct = Slowwat_Pct,
+         SubEstGrvl = Prc_Grv,
+         WetBraid = wet_braid,
+         WetSC_Pct = SC_Pct,
+         Lgth_Wet = Length,
+         Area_Wet = SHAPE_A) %>%
+  mutate(FishCovSome = 100 - FishCovNone,
+         UcutLgth_Pct = Undrc_L / Lgth_Wet,
+         WetWdth_Int = Area_Wet / Lgth_Wet) %>%
+  mutate_at(vars(SlowWater_Pct, WetSC_Pct, Hab_Roll),
+            list(~ if_else(is.na(.), 0, .))) %>%
+  select(Site = SiteNam,
+         Hab_Roll,
+         Lgth_Wet,
+         Area_Wet,
+         one_of(unique(sel_hab_mets$Metric))) %>%
+  filter(!is.na(Hab_Roll)) %>%
+  filter(!is.na(Sin_CL))
+
+pred_df = pred_sf %>%
+  st_drop_geometry() %>%
+  as_tibble()
+
+# what quantile is a proxy for capacity?
+pred_quant = 0.9
+
+# make predictions at every hab_roll reach
+pred_df %<>%
+  mutate(chnk_per_m = predict(qrf_mods[['Chinook']],
+                              newdata = select(., one_of(unique(sel_hab_mets$Metric))),
+                              what = pred_quant),
+         chnk_per_m = exp(chnk_per_m) - dens_offset,
+         chnk_per_m2 = chnk_per_m * Lgth_Wet / Area_Wet)
+
+pred_sf %<>%
+  left_join(pred_df %>%
+              select(Site, Hab_Roll,
+                     starts_with('chnk_per')))
+
+save(pred_sf,
+     file = "../data/qrf/mra_preds.rda")
+```
+
 
 # Introduction
 
@@ -227,11 +281,11 @@ We took our QRF extrapolation estimates at each 200 m reach, and determined whic
 
 ## Capacity at MRA sites
 
-We used the QRF model to predict capacity at MRA sites that were sampled with DASH in 2018.
+We used the QRF model to predict capacity at MRA sites that were sampled with DASH in 2018. We used the predicted `r pred_quant * 100`th quantile as a proxy for carrying capacity. 
 
 # Results
 
-# Geomorphic Reaches
+## Geomorphic Reaches
 
 The distribution of capacity predictions within each geomorphic reach is shown in Figures \@ref(fig:chnk-violin-p) and \@ref(fig:sthd-violin-p). Figures \@ref(fig:lem-map), \@ref(fig:pah-map) and \@ref(fig:ups-map) are maps depicting the average capacity within each geomorphic reach.
 
@@ -462,3 +516,39 @@ ggarrange(plotlist = list(ups_chnk_map,
           nrow = 1)
 
 ```
+
+## Capacity at MRA sites
+
+```{r mra-maps}
+map_list = pred_sf %>%
+  split(list(.$Site)) %>%
+  map(.f = function(x) {
+    x %>%
+      ggplot() +
+      geom_sf(aes(color = chnk_per_m2,
+                  fill = chnk_per_m2)) +
+      scale_color_viridis_c(direction = -1,
+                            name = bquote("Chinook Parr (per " *m^2 *")")) +
+      scale_fill_viridis_c(direction = -1,
+                           name = bquote("Chinook Parr (per " *m^2 *")")) +
+      theme(axis.text = element_blank(),
+            legend.position = 'bottom') +
+      labs(title = unique(x$Site))
+  })
+
+# save maps as pdfs
+pdf("../output/figures/Chnk_Parr_Maps.pdf",
+       width = 5,
+       height = 8)
+for(i in seq_along(map_list)) {
+  print(map_list[[i]])
+}
+dev.off()
+
+ggarrange(plotlist = map_list,
+          nrow = 2,
+          ncol = 2,
+          common.legend = T,
+          legend = 'bottom')
+```
+
