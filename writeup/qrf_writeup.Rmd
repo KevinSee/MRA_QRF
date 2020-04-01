@@ -535,7 +535,9 @@ map_list = pred_sf %>%
             legend.position = 'bottom') +
       labs(title = unique(x$Site))
   })
+```
 
+```{r save-maps, eval = F}
 # save maps as pdfs
 pdf("../output/figures/Chnk_Parr_Maps.pdf",
        width = 5,
