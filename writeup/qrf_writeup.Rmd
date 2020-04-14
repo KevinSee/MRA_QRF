@@ -130,6 +130,14 @@ pred_sf = dash2018_fr %>%
                             Hab_Roll)) %>%
   mutate_at(vars(SlowWater_Pct, WetSC_Pct),
             list(~ if_else(is.na(.), 0, .))) %>%
+  mutate_at(vars(SlowWater_Pct, 
+                 WetSC_Pct),
+            list(~ .* 100)) %>%
+  # convert discharge from cfs to m3/s
+  mutate_at(vars(Q),
+            list(measurements::conv_unit),
+            from = "ft3_per_sec",
+            to = "m3_per_sec") %>%
   select(Site = SiteNam,
          Hab_Roll,
          Lgth_Wet,
@@ -222,28 +230,38 @@ qrf_mods %>%
        y = 'Relative Importance')
 ```
 
-```{r rel-imp-v2, eval = F, fig.cap="Relative importance of each habitat covariate, by species."}
+```{r rel-imp-v2, eval = T, fig.cap="Relative importance of each habitat covariate, by species."}
+# relative importance data.frames
+rel_imp_df = qrf_mods %>%
+  map_df(.id = 'Species',
+         .f = function(x) {
+           as_tibble(x$importance,
+                     rownames = 'Metric') %>%
+             mutate(relImp = IncNodePurity / max(IncNodePurity)) %>%
+             left_join(hab_dict %>%
+                         select(Metric = ShortName,
+                                Name)) %>%
+             mutate_at(vars(Metric, Name),
+                       list(~ fct_reorder(., relImp))) %>%
+             arrange(Metric) %>%
+             distinct()
+         })
+
 # separate plots by species
-rel_imp_list = qrf_mods %>%
+rel_imp_list = rel_imp_df %>%
+  split(list(.$Species)) %>%
   map(.f = function(x) {
-    as_tibble(x$importance,
-              rownames = 'Metric') %>%
-      mutate(relImp = IncNodePurity / max(IncNodePurity)) %>%
-      left_join(hab_dict %>%
-                  select(Metric = ShortName,
-                         Name)) %>%
+    x %>%
       mutate_at(vars(Metric, Name),
                 list(~ fct_reorder(., relImp))) %>%
-      arrange(Metric) %>%
-      distinct() %>%
       ggplot(aes(x = Name,
                  y = relImp)) +
       geom_col(fill = 'gray40') +
       coord_flip() +
       labs(x = 'Metric',
            y = 'Relative Importance')
-    
-  })
+    })
+
 # add species name to each plot
 for(i in 1:length(rel_imp_list)) {
   rel_imp_list[[i]] = rel_imp_list[[i]] +
@@ -681,3 +699,95 @@ map_list[["LowerLemhi_2018"]]
 ```{r qrf-usl-map}
 map_list[["UpperSalmon_2018"]]
 ```
+
+Here are some options to help understand what factors are driving high or low capacity within each MRA reach.
+
+```{r}
+bar_plot_list = pred_df %>%
+  split(list(.$Site)) %>%
+  map(.f = function(x) {
+    x %>%
+      gather(Metric, value, -c(Site:Area_Wet), -starts_with("chnk")) %>%
+      mutate_at(vars(Hab_Roll),
+                list(as.factor)) %>%
+      mutate(Hab_Roll = fct_reorder(Hab_Roll,
+                                    chnk_per_m2)) %>%
+      left_join(rel_imp_df %>%
+              filter(Species == 'Chinook')) %>%
+      mutate_at(vars(Metric, Name),
+                list(~ fct_reorder(., desc(relImp)))) %>%
+      ggplot(aes(x = Hab_Roll,
+                 y = value,
+                 fill = chnk_per_m2)) +
+      geom_col() +
+      scale_fill_viridis_c(direction = -1) +
+      facet_wrap(~ Name,
+                 scales = 'free_y') +
+      theme(legend.position = "bottom") +
+      labs(x = 'Habitat Reach',
+           y = 'Metric Value',
+           fill = expression('Chinook per'~m^2))
+  })
+
+xy_plot_list = pred_df %>%
+  split(list(.$Site)) %>%
+  map(.f = function(x) {
+    x %>%
+      gather(Metric, value, -c(Site:Area_Wet), -starts_with("chnk")) %>%
+  mutate_at(vars(Hab_Roll),
+            list(as.factor)) %>%
+  mutate(Hab_Roll = fct_reorder(Hab_Roll,
+                                chnk_per_m2)) %>%
+  left_join(rel_imp_df %>%
+              filter(Species == 'Chinook')) %>%
+  mutate_at(vars(Metric, Name),
+            list(~ fct_reorder(., desc(relImp)))) %>%
+  ggplot(aes(x = value,
+             y = chnk_per_m2)) +
+  geom_smooth() +
+  geom_point() +
+  facet_wrap(~ Name,
+             scales = 'free') +
+  labs(x = 'Metric Value',
+       y = expression('Chinook per'~m^2))
+  })
+
+for(nm in names(bar_plot_list)) {
+  bar_plot_list[[nm]] = bar_plot_list[[nm]] +
+    labs(title = nm)
+}
+
+
+
+xy_plot_all = pred_df %>%
+  gather(Metric, value, -c(Site:Area_Wet), -starts_with("chnk")) %>%
+  mutate_at(vars(Hab_Roll),
+            list(as.factor)) %>%
+  mutate(Hab_Roll = fct_reorder(Hab_Roll,
+                                chnk_per_m2)) %>%
+  left_join(rel_imp_df %>%
+              filter(Species == 'Chinook')) %>%
+  mutate_at(vars(Metric, Name),
+            list(~ fct_reorder(., desc(relImp)))) %>%
+  ggplot(aes(x = value,
+             y = chnk_per_m2)) +
+  geom_smooth() +
+  geom_point(aes(color = Site)) +
+  scale_color_brewer(palette = 'Set1') +
+  facet_wrap(~ Name,
+             scales = 'free') +
+  labs(x = 'Metric Value',
+       y = expression('Chinook per'~m^2))
+```
+
+```{r cap_xy_plot, fig.cap = "Scatterplot of covariates and Chinook parr capacity, colored by MRA site."}
+xy_plot_all
+```
+
+```{r}
+bar_plot_list[[1]]
+bar_plot_list[[2]]
+bar_plot_list[[3]]
+bar_plot_list[[4]]
+```
+
