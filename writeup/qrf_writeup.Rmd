@@ -103,6 +103,10 @@ salm_cap = st_read('../data/qrf/salmon_cap.gpkg',
                    quiet = T) %>%
   st_transform(st_crs(lem_geo_rch))
 
+# QRF extrapolations in Salmon subbasin on master sample points
+cap_pts = st_read('../data/qrf/UpperSalmon_MastPts_Cap_juv_summer_dash.gpkg',
+                  quiet = T) %>%
+  st_transform(st_crs(lem_geo_rch))
 ```
 
 ```{r cap-pred-mra-rchs} 
@@ -121,7 +125,10 @@ pred_sf = dash2018_fr %>%
   mutate(FishCovSome = 100 - FishCovNone,
          UcutLgth_Pct = Undrc_L / Lgth_Wet,
          WetWdth_Int = Area_Wet / Lgth_Wet) %>%
-  mutate_at(vars(SlowWater_Pct, WetSC_Pct, Hab_Roll),
+  mutate(Hab_Roll = if_else(SiteNam == 'Pahsimeroi_2018' & is.na(Hab_Roll),
+                            0,
+                            Hab_Roll)) %>%
+  mutate_at(vars(SlowWater_Pct, WetSC_Pct),
             list(~ if_else(is.na(.), 0, .))) %>%
   select(Site = SiteNam,
          Hab_Roll,
@@ -275,6 +282,10 @@ From this QRF model, we made capacity predictions at every CHaMP site, after ave
 
 # Methods
 
+## Watershed Maps
+
+We created maps depicting the entire watershed (Lemhi, Pahsimeroi and Upper Salmon) showing QRF predicted summer juvenile capacity in units of fish / m$^2$. 
+
 ## Geomorphic Reaches
 
 We took our QRF extrapolation estimates at each 200 m reach, and determined which reaches fell into each geomorphic reach within each watershed. Then we examined the distribution of capacity estimates within each reach, and the average capacity for each reach.
@@ -284,6 +295,106 @@ We took our QRF extrapolation estimates at each 200 m reach, and determined whic
 We used the QRF model to predict capacity at MRA sites that were sampled with DASH in 2018. We used the predicted `r pred_quant * 100`th quantile as a proxy for carrying capacity. 
 
 # Results
+
+## Watershed Maps
+
+```{r wtsd_maps}
+# Chinook
+chnk_maps = cap_pts %>%
+  filter(!is.na(chnk_use)) %>%
+  split(list(.$HUC8NmNRCS)) %>%
+  map(.f = function(x) {
+
+    # wtsd_bb = st_bbox(x) %>%
+    #   st_as_sfc()
+    wtsd_bndry = x %>%
+      st_union() %>%
+      st_convex_hull()
+    
+    strm_lines = QRFcapacity::get_flowlines(stream_order = 2,
+                                            wtsd_polygon = wtsd_bndry) %>%
+      st_transform(st_crs(x)) %>%
+      filter(grepl(unique(x$HUC_8), reachcode))
+    
+    x %>%
+      ggplot() +
+      geom_sf(data = strm_lines,
+              color = 'blue') +
+      geom_sf(aes(color = chnk_per_m2)) +
+      scale_color_viridis_c(direction = -1,
+                       name = expression('Chinook per'~m^2)) +
+      theme(axis.text.x = element_text(angle = -45, vjust = 0),
+            axis.title.x = element_blank(),
+            axis.title.y = element_blank(),
+            legend.position = "bottom")
+  })
+for(nm in names(chnk_maps)) {
+  chnk_maps[[nm]] = chnk_maps[[nm]] +
+    labs(title = nm)
+}
+
+# steelhead
+sthd_maps = cap_pts %>%
+  filter(!is.na(sthd_use)) %>%
+  filter(! HUC10NmNRC %in% c('Valley Creek', 
+                                  'Yankee Fork')) %>%
+  split(list(.$HUC8NmNRCS)) %>%
+  map(.f = function(x) {
+
+    # wtsd_bb = st_bbox(x) %>%
+    #   st_as_sfc()
+    wtsd_bndry = x %>%
+      st_union() %>%
+      st_convex_hull()
+    
+    strm_lines = QRFcapacity::get_flowlines(stream_order = 2,
+                                            wtsd_polygon = wtsd_bndry) %>%
+      st_transform(st_crs(x)) %>%
+      filter(grepl(unique(x$HUC_8), reachcode))
+    
+    x %>%
+      ggplot() +
+      geom_sf(data = strm_lines,
+              color = 'blue') +
+      geom_sf(aes(color = sthd_per_m2)) +
+      scale_color_viridis_c(direction = -1,
+                       name = expression('Steelhead per'~m^2)) +
+      theme(axis.text.x = element_text(angle = -45, vjust = 0),
+            axis.title.x = element_blank(),
+            axis.title.y = element_blank(),
+            legend.position = "bottom")
+  })
+for(nm in names(sthd_maps)) {
+  sthd_maps[[nm]] = sthd_maps[[nm]] +
+    labs(title = nm)
+}
+
+```
+
+```{r chnk_map_lem}
+chnk_maps[["Lemhi"]]
+```
+
+```{r chnk_map_pah}
+chnk_maps[["Pahsimeroi"]]
+```
+
+```{r chnk_map_ups}
+chnk_maps[["Upper Salmon"]]
+```
+
+```{r sthd_map_lem}
+sthd_maps[["Lemhi"]]
+```
+
+```{r sthd_map_pah}
+sthd_maps[["Pahsimeroi"]]
+```
+
+```{r sthd_map_ups}
+sthd_maps[["Upper Salmon"]]
+```
+
 
 ## Geomorphic Reaches
 
