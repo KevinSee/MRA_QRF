@@ -702,7 +702,7 @@ map_list[["UpperSalmon_2018"]]
 
 Here are some options to help understand what factors are driving high or low capacity within each MRA reach.
 
-```{r}
+```{r cap-eda-figs}
 bar_plot_list = pred_df %>%
   split(list(.$Site)) %>%
   map(.f = function(x) {
@@ -778,16 +778,212 @@ xy_plot_all = pred_df %>%
              scales = 'free') +
   labs(x = 'Metric Value',
        y = expression('Chinook per'~m^2))
+
+box_plot_all = pred_df %>%
+  gather(Metric, value, -c(Site:Area_Wet), -starts_with("chnk")) %>%
+  mutate_at(vars(Hab_Roll),
+            list(as.factor)) %>%
+  mutate(Hab_Roll = fct_reorder(Hab_Roll,
+                                chnk_per_m2)) %>%
+  left_join(rel_imp_df %>%
+              filter(Species == 'Chinook')) %>%
+  mutate_at(vars(Metric, Name),
+            list(~ fct_reorder(., desc(relImp)))) %>%
+  mutate(Site = str_remove(Site, "_2018$")) %>%
+  group_by(Site) %>%
+  mutate(avg_cap = mean(chnk_per_m2, na.rm = T)) %>%
+  ungroup() %>%
+  mutate_at(vars(Site),
+            list(~ fct_reorder(., avg_cap))) %>%
+  ggplot(aes(x = Site,
+             y = value)) +
+  geom_boxplot(aes(fill = avg_cap)) +
+  scale_fill_viridis_c(direction = -1,
+                       name = expression('Avg. Chinook per'~m^2)) +
+  # scale_fill_brewer(palette = 'Set1') +
+  facet_wrap(~ Name,
+             scales = 'free_y') +
+  theme(axis.text.x = element_text(angle = 45,
+                                   hjust = 1),
+        legend.position = "bottom") +
+  labs(x = "Site",
+       y = "Metric Value")
 ```
 
-```{r cap_xy_plot, fig.cap = "Scatterplot of covariates and Chinook parr capacity, colored by MRA site."}
+```{r cap-xy-plot, fig.cap = "Scatterplot of covariates and Chinook parr capacity, colored by MRA site. The facet order of covariates corresponds to their relative importance."}
 xy_plot_all
 ```
+
+```{r cap-box-plot, fig.cap = "Boxplots showing distribution of covariates in each MRA site, colored by their average Chinook parr capacity. The facet order of covariates corresponds to their relative importance."}
+box_plot_all
+```
+
+
+The following are bar plots, split by MRA site. Within each MRA site, the habitat reaches are ordered lowest capacity to highest, and the bars are also colored that way. The height of each bar shows the value of that habitat covariate.
 
 ```{r}
 bar_plot_list[[1]]
 bar_plot_list[[2]]
 bar_plot_list[[3]]
 bar_plot_list[[4]]
+```
+
+```{r pdp-mra-points, eval =T} 
+# new partial dependent plots
+
+rf_mod = qrf_mods[['Chinook']]
+data = qrf_mod_df %>%
+  filter(Species == 'Chinook')
+data_dict = hab_dict
+log_offset = dens_offset
+type = 'quantile'
+pred_quantile = 0.9
+n_pts = 200
+log_transform = T
+plot_covars = NULL
+
+# relative importance of covariates
+rel_imp = as_tibble(rf_mod$importance,
+                    rownames = 'Metric') %>%
+  mutate(relImp = IncNodePurity / max(IncNodePurity)) %>%
+  mutate_at(vars(Metric),
+            list(~ fct_reorder(., relImp))) %>%
+  arrange(desc(Metric))
+
+# names of covariates
+covars = rel_imp$Metric
+if(is.null(plot_covars)) plot_covars = covars
+
+# get means and ranges of all
+covar_range = data %>%
+  select(one_of(as.character(plot_covars))) %>%
+  gather(Metric, value) %>%
+  group_by(Metric) %>%
+  summarise_at(vars(value),
+               list(mean = mean, 
+                    median = median, 
+                    min = min, 
+                    max = max),
+               na.rm = T) %>%
+  ungroup()
+
+# create data.frame with sequence of values across each covariate, keeping other covariates at their average value
+pdp_df = covar_range %>%
+  split(.$Metric) %>%
+  map_df(.id = 'Metric',
+         .f = function(x) {
+           
+           if(class(pull(data, x$Metric)) %in% c('integer', 'numeric')) {
+             df = crossing(value = seq(x$min,
+                                       x$max,
+                                       length.out = n_pts),
+                           covar_range %>%
+                             filter(Metric != x$Metric) %>%
+                             select(Metric, median) %>%
+                             spread(Metric, median)) %>%
+               mutate(met = value)
+             
+             names(df)[match('met', names(df))] = x$Metric
+             
+           } 
+           if(class(pull(data, x$Metric)) %in% c('factor')) {
+             df = crossing(value = data %>%
+                             select(x$Metric) %>%
+                             levels,
+                           covar_range %>%
+                             filter(Metric != x$Metric) %>%
+                             select(Metric, median) %>%
+                             spread(Metric, median)) %>%
+               mutate(met = value)
+             
+             names(df)[match('met', names(df))] = x$Metric
+           }
+           
+           return(df)
+         }) %>%
+  mutate(Metric = factor(Metric,
+                         levels = levels(covars)))
+
+# make predictions
+if(type == 'quantile') {
+  pdp_df = pdp_df %>%
+    mutate(pred = predict(rf_mod,
+                          newdata = .,
+                          what = pred_quantile))
+}
+if(type == 'mean') {
+  pdp_df = pdp_df %>%
+    mutate(pred = predict(rf_mod,
+                          newdata = .,
+                          what = mean))
+}
+
+# transform predictions back from log-scale if necessary
+if(log_transform) {
+  pdp_df = pdp_df %>%
+    mutate_at(vars(pred),
+              list(~ exp(.) - log_offset))
+}
+
+# get covariate labels
+pdp_df = pdp_df %>%
+  left_join(data_dict %>%
+              select(Metric = ShortName, covar_label = Name)) %>%
+  # put covariates in order by relative importance
+  left_join(rel_imp %>%
+              select(Metric, relImp)) %>%
+  mutate_at(vars(Metric, covar_label),
+            list(~ fct_reorder(., relImp))) %>%
+  mutate_at(vars(Metric, covar_label),
+            list(fct_rev))
+
+
+# create data.frame for rug ticks
+rug_df = pred_df %>%
+  gather(Metric, value, -c(Site:Area_Wet), -starts_with("chnk")) %>%
+  left_join(rel_imp %>%
+              left_join(data_dict %>%
+                          select(Metric = ShortName, 
+                                 covar_label = Name))) %>%
+  mutate_at(vars(Metric, covar_label),
+            list(~ fct_reorder(., relImp))) %>%
+  mutate_at(vars(Metric, covar_label),
+            list(fct_rev)) %>%
+  select(Metric, covar_label, Site, value) %>%
+  mutate_at(vars(value),
+            list(round),
+            digits = 1) %>%
+  left_join(pdp_df %>%
+              select(Metric, value, pred) %>%
+              mutate_at(vars(value),
+                        list(round),
+                        digits = 1))
+
+my_p = pdp_df %>%
+  filter(Metric %in% plot_covars) %>%
+  ggplot(aes(x = value,
+             y = pred)) +
+  geom_smooth(method = 'loess',
+              se = F,
+              # span = 0.7,
+              color = 'black') +
+  # geom_line(color = 'gray',
+  #           lwd = 1,
+  #           linetype = 2) +
+  geom_point(data = rug_df %>%
+               filter(Metric %in% plot_covars) %>%
+               distinct(), 
+             aes(color = Site)) +
+  scale_color_brewer(palette = 'Set1') +
+  theme_bw() +
+  theme(legend.position = 'bottom') +
+  labs(y = 'Prediction (per m)',
+       x = 'Covariate Value',
+       color = 'MRA Site') +
+  facet_wrap(~ covar_label,
+             scales = "free")
+
+my_p
+
 ```
 
