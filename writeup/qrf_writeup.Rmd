@@ -296,7 +296,9 @@ plot_partial_dependence(qrf_mods[['Steelhead']],
   labs(title = 'Steelhead')
 ```
 
-From this QRF model, we made capacity predictions at every CHaMP site, after averaging the habitat metrics across years for sites visited more than once. We then tied each CHaMP site to a 200 m reach on a stream network with various attributes, and used those attributes to extrapolate capacity to every 200 m reach on that network.
+From this QRF model, we made capacity predictions at every CHaMP site, after averaging the habitat metrics across years for sites visited more than once. We extrapolated those predictions of capacity at CHaMP sites to every master sample points using various globally available attributes assigned to every master sample point (including each CHaMP sites).
+
+<!-- We then tied each CHaMP site to a 200 m reach on a stream network with various attributes, and used those attributes to extrapolate capacity to every 200 m reach on that network.  -->
 
 # Methods
 
@@ -306,7 +308,10 @@ We created maps depicting the entire watershed (Lemhi, Pahsimeroi and Upper Salm
 
 ## Geomorphic Reaches
 
-We took our QRF extrapolation estimates at each 200 m reach, and determined which reaches fell into each geomorphic reach within each watershed. Then we examined the distribution of capacity estimates within each reach, and the average capacity for each reach.
+<!-- We took our QRF extrapolation estimates at each 200 m reach, and determined which reaches fell into each geomorphic reach within each watershed. Then we examined the distribution of capacity estimates within each reach, and the average capacity for each reach. -->
+
+We took our QRF extrapolation estimates at each master sample point, and determined which points fell into each geomorphic reach within each watershed. Then we examined the distribution of capacity estimates within each reach, and the average capacity for each reach.
+
 
 ## Capacity at MRA sites
 
@@ -426,32 +431,53 @@ geo_rch_list = list("Lemhi" = lem_geo_rch %>%
                     "Upper Salmon" = ups_geo_rch %>%
                       mutate(Watershed = 'Upper Salmon'))
 
+# # uses extrapolation estimates from Morgan's 200 m reaches
+# gr_cap = geo_rch_list %>%
+#   map(.f = function(x) {
+#     x %>%
+#       st_join(salm_cap %>%
+#             filter(sthd) %>%
+#             select(UniqueID, 
+#                    GNIS_Name,
+#                    model,
+#                    matches('sthd_per'), 
+#                    matches('sthd_tot')) %>%
+#             full_join(salm_cap %>%
+#                         filter(chnk) %>%
+#                         st_drop_geometry() %>%
+#                         select(UniqueID, 
+#                                GNIS_Name,
+#                                model,
+#                                matches('chnk_per'), 
+#                                matches('chnk_tot')))) %>%
+#       filter((Watershed == 'Lemhi' & GNIS_Name == 'Lemhi River') |
+#                (Watershed == 'Pahsimeroi' & GNIS_Name == 'Pahsimeroi River') |
+#                (Watershed == 'Upper Salmon' & GNIS_Name == 'Salmon River')) %>%
+#       mutate(rch_num = str_extract(GeoReach, '[:digit:]+'),
+#              rch_num = as.numeric(rch_num),
+#              GeoReach = str_replace(GeoReach, '_', '-')) %>%
+#       mutate(GeoReach = factor(GeoReach,
+#                            levels = paste0("GR-", min(rch_num):max(rch_num))))
+#   })
+
+# uses extrapolation from master sample points
 gr_cap = geo_rch_list %>%
   map(.f = function(x) {
     x %>%
-      st_join(salm_cap %>%
-            filter(sthd) %>%
-            select(UniqueID, 
-                   GNIS_Name,
-                   model,
-                   matches('sthd_per'), 
-                   matches('sthd_tot')) %>%
-            full_join(salm_cap %>%
-                        filter(chnk) %>%
-                        st_drop_geometry() %>%
-                        select(UniqueID, 
-                               GNIS_Name,
-                               model,
-                               matches('chnk_per'), 
-                               matches('chnk_tot')))) %>%
-      filter((Watershed == 'Lemhi' & GNIS_Name == 'Lemhi River') |
-               (Watershed == 'Pahsimeroi' & GNIS_Name == 'Pahsimeroi River') |
-               (Watershed == 'Upper Salmon' & GNIS_Name == 'Salmon River')) %>%
+      st_join(cap_pts %>%
+                filter(!is.na(sthd_use)) %>%
+                select(Site, 
+                       matches('sthd_per')) %>%
+                full_join(cap_pts %>%
+                            filter(!is.na(chnk_use)) %>%
+                            st_drop_geometry() %>%
+                            select(Site,
+                                   matches('chnk_per')))) %>%
       mutate(rch_num = str_extract(GeoReach, '[:digit:]+'),
              rch_num = as.numeric(rch_num),
              GeoReach = str_replace(GeoReach, '_', '-')) %>%
       mutate(GeoReach = factor(GeoReach,
-                           levels = paste0("GR-", min(rch_num):max(rch_num))))
+                               levels = paste0("GR-", min(rch_num):max(rch_num))))
   })
 
 # put into data.frame
@@ -467,7 +493,7 @@ gr_cap_df = gr_cap %>%
 
 ```
 
-```{r chnk-violin-p, fig.cap = "Violin plots showing the distribution of Chinook capacity estimates for 200 m reaches within each geomorphic reach in each watershed."}
+```{r chnk-violin-p, fig.cap = "Violin plots showing the distribution of Chinook capacity estimates for master sample points within each geomorphic reach in each watershed."}
 gr_cap_df %>%
   ggplot(aes(x = GeoReach,
              y = chnk_per_m)) +
@@ -484,7 +510,7 @@ gr_cap_df %>%
 
 ```
 
-```{r sthd-violin-p, fig.cap = "Violin plots showing the distribution of steelhead capacity estimates for 200 m reaches within each geomorphic reach in each watershed."}
+```{r sthd-violin-p, fig.cap = "Violin plots showing the distribution of steelhead capacity estimates for master sample points within each geomorphic reach in each watershed."}
 gr_cap_df %>%
   ggplot(aes(x = GeoReach,
              y = sthd_per_m)) +
