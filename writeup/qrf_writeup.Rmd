@@ -166,8 +166,8 @@ pred_sf %<>%
               select(Site, Hab_Roll,
                      starts_with('chnk_per')))
 
-save(pred_sf,
-     file = "../data/qrf/mra_preds.rda")
+# save(pred_sf,
+#      file = "../data/qrf/mra_preds.rda")
 ```
 
 
@@ -175,7 +175,7 @@ save(pred_sf,
 
 ## QRF Model
 
-We developed a quantile random forest (QRF) model with paired fish and habitat data from a number of sites around the Columbia River Basin (Table \@ref(tab:sample-size)). We developed separate QRF models for each species, using the haitat covariates shown in Table \@ref(tab:sel-mets).
+We developed a quantile random forest (QRF) model with paired fish and habitat data from a number of sites around the Columbia River Basin (Table \@ref(tab:sample-size)). We developed separate QRF models for each species, using the haitat covariates shown in Table \@ref(tab:sel-mets). Please note that the total volume of large wood has been scaled by the site length, so it is in units of m$^3$ / 100 m. 
 
 ```{r sample-size}
 qrf_mod_df %>%
@@ -818,6 +818,7 @@ box_plot_all = pred_df %>%
   mutate(Site = str_remove(Site, "_2018$")) %>%
   group_by(Site) %>%
   mutate(avg_cap = mean(chnk_per_m2, na.rm = T)) %>%
+  # mutate(avg_cap = mean(chnk_per_m, na.rm = T)) %>%
   ungroup() %>%
   mutate_at(vars(Site),
             list(~ fct_reorder(., avg_cap))) %>%
@@ -985,7 +986,36 @@ rug_df = pred_df %>%
                         list(round),
                         digits = 1))
 
-my_p = pdp_df %>%
+# my_p = pdp_df %>%
+#   filter(Metric %in% plot_covars) %>%
+#   ggplot(aes(x = value,
+#              y = pred)) +
+#   geom_smooth(method = 'loess',
+#               se = F,
+#               # span = 0.7,
+#               color = 'black') +
+#   # geom_line(color = 'gray',
+#   #           lwd = 1,
+#   #           linetype = 2) +
+#   geom_point(data = rug_df %>%
+#                filter(Metric %in% plot_covars) %>%
+#                distinct(), 
+#              aes(color = Site)) +
+#   scale_color_brewer(palette = 'Set1') +
+#   theme_bw() +
+#   theme(legend.position = 'bottom') +
+#   labs(y = 'Prediction (per m)',
+#        x = 'Covariate Value',
+#        color = 'MRA Site') +
+#   facet_wrap(~ covar_label,
+#              scales = "free")
+# 
+# my_p
+
+pdp_list = rug_df %>%
+  split(list(.$Site)) %>%
+  map(.f = function(x) {
+    pdp_df %>%
   filter(Metric %in% plot_covars) %>%
   ggplot(aes(x = value,
              y = pred)) +
@@ -996,20 +1026,25 @@ my_p = pdp_df %>%
   # geom_line(color = 'gray',
   #           lwd = 1,
   #           linetype = 2) +
-  geom_point(data = rug_df %>%
+  geom_point(data = x %>%
                filter(Metric %in% plot_covars) %>%
                distinct(), 
-             aes(color = Site)) +
-  scale_color_brewer(palette = 'Set1') +
+             color = 'red') +
   theme_bw() +
   theme(legend.position = 'bottom') +
   labs(y = 'Prediction (per m)',
        x = 'Covariate Value',
-       color = 'MRA Site') +
+       title = unique(x$Site)) +
   facet_wrap(~ covar_label,
-             scales = "free")
+             scales = "free_x")
+  })
 
-my_p
+```
 
+```{r pdp-mra-figs, fig.cap = "Partial dependence plots of the Chinook parr QRF model, showing the measured values of the covariates for each habitat reach within a particular MRA site. Note that the y-axis shows predictions of capacity on a linear density scale (fish / m)."}
+pdp_list[[1]]
+pdp_list[[2]]
+pdp_list[[3]]
+pdp_list[[4]]
 ```
 
