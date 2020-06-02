@@ -168,6 +168,7 @@ pred_sf %<>%
 
 # save(pred_sf,
 #      file = "../data/qrf/mra_preds.rda")
+
 ```
 
 
@@ -536,9 +537,9 @@ lem_chnk_map = gr_cap$Lemhi %>%
                na.rm = T) %>%
   ungroup() %>%
   ggplot() +
-  geom_sf(aes(fill = chnk_per_m)) +
+  geom_sf(aes(fill = chnk_per_m2)) +
   scale_fill_viridis_c(direction = -1,
-                       name = 'Capacity per m') +
+                       name = expression('Capacity per'~m^2)) +
   geom_sf_label(aes(label = str_remove(GeoReach, "^GR_")),
                 size = 2,
                 nudge_x = 3000,
@@ -556,9 +557,9 @@ lem_sthd_map = gr_cap$Lemhi %>%
                na.rm = T) %>%
   ungroup() %>%
   ggplot() +
-  geom_sf(aes(fill = sthd_per_m)) +
+  geom_sf(aes(fill = sthd_per_m2)) +
   scale_fill_viridis_c(direction = -1,
-                       name = 'Capacity per m') +
+                       name = expression('Capacity per'~m^2)) +
   geom_sf_label(aes(label = str_remove(GeoReach, "^GR_")),
                 size = 2,
                 nudge_x = 3000,
@@ -572,7 +573,9 @@ lem_sthd_map = gr_cap$Lemhi %>%
 ggarrange(plotlist = list(lem_chnk_map,
                           lem_sthd_map),
           labels = 'AUTO',
-          nrow = 1)
+          nrow = 1,
+          common.legend = T,
+          legend = 'bottom')
 
 ```
 
@@ -584,9 +587,9 @@ pah_chnk_map = gr_cap$Pahsimeroi %>%
                na.rm = T) %>%
   ungroup() %>%
   ggplot() +
-  geom_sf(aes(fill = chnk_per_m)) +
+  geom_sf(aes(fill = chnk_per_m2)) +
   scale_fill_viridis_c(direction = -1,
-                       name = 'Capacity per m') +
+                       name = expression('Capacity per'~m^2)) +
   geom_sf_label(aes(label = str_remove(GeoReach, "^GR_")),
                 size = 2,
                 nudge_x = 3000,
@@ -604,9 +607,9 @@ pah_sthd_map = gr_cap$Pahsimeroi %>%
                na.rm = T) %>%
   ungroup() %>%
   ggplot() +
-  geom_sf(aes(fill = sthd_per_m)) +
+  geom_sf(aes(fill = sthd_per_m2)) +
   scale_fill_viridis_c(direction = -1,
-                       name = 'Capacity per m') +
+                       name = expression('Capacity per'~m^2)) +
   geom_sf_label(aes(label = str_remove(GeoReach, "^GR_")),
                 size = 2,
                 nudge_x = 3000,
@@ -620,7 +623,9 @@ pah_sthd_map = gr_cap$Pahsimeroi %>%
 ggarrange(plotlist = list(pah_chnk_map,
                           pah_sthd_map),
           labels = 'AUTO',
-          nrow = 1)
+          nrow = 1,
+          legend = 'bottom',
+          common.legend = T)
 
 ```
 
@@ -632,9 +637,9 @@ ups_chnk_map = gr_cap$`Upper Salmon` %>%
                na.rm = T) %>%
   ungroup() %>%
   ggplot() +
-  geom_sf(aes(fill = chnk_per_m)) +
+  geom_sf(aes(fill = chnk_per_m2)) +
   scale_fill_viridis_c(direction = -1,
-                       name = 'Capacity per m') +
+                       name = expression('Capacity per'~m^2)) +
   geom_sf_label(aes(label = str_remove(GeoReach, "^GR_")),
                 size = 2,
                 nudge_x = 3000,
@@ -652,9 +657,9 @@ ups_sthd_map = gr_cap$`Upper Salmon` %>%
                na.rm = T) %>%
   ungroup() %>%
   ggplot() +
-  geom_sf(aes(fill = sthd_per_m)) +
+  geom_sf(aes(fill = sthd_per_m2)) +
   scale_fill_viridis_c(direction = -1,
-                       name = 'Capacity per m') +
+                       name = expression('Capacity per'~m^2)) +
   geom_sf_label(aes(label = str_remove(GeoReach, "^GR_")),
                 size = 2,
                 nudge_x = 3000,
@@ -668,13 +673,16 @@ ups_sthd_map = gr_cap$`Upper Salmon` %>%
 ggarrange(plotlist = list(ups_chnk_map,
                           ups_sthd_map),
           labels = 'AUTO',
-          nrow = 1)
+          nrow = 1,
+          common.legend = T,
+          legend = 'bottom')
 
 ```
 
 ## Capacity at MRA sites
 
 ```{r mra-maps}
+# using fish / m^2
 map_list = pred_sf %>%
   split(list(.$Site)) %>%
   map(.f = function(x) {
@@ -690,6 +698,24 @@ map_list = pred_sf %>%
             legend.position = 'bottom') +
       labs(title = unique(x$Site))
   })
+
+# using fish / m
+map_list_per_m = pred_sf %>%
+  split(list(.$Site)) %>%
+  map(.f = function(x) {
+    x %>%
+      ggplot() +
+      geom_sf(aes(color = chnk_per_m,
+                  fill = chnk_per_m)) +
+      scale_color_viridis_c(direction = -1,
+                            name = "Chinook Parr (per m)") +
+      scale_fill_viridis_c(direction = -1,
+                           name = "Chinook Parr (per m)") +
+      theme(axis.text = element_blank(),
+            legend.position = 'bottom') +
+      labs(title = unique(x$Site))
+  })
+
 ```
 
 ```{r save-maps, eval = F}
@@ -702,28 +728,44 @@ for(i in seq_along(map_list)) {
 }
 dev.off()
 
+pdf("../output/figures/Chnk_Parr_Maps_per_m.pdf",
+       width = 5,
+       height = 8)
+for(i in seq_along(map_list)) {
+  print(map_list_per_m[[i]])
+}
+dev.off()
+
+
 # ggarrange(plotlist = map_list,
 #           nrow = 2,
 #           ncol = 2,
 #           common.legend = T,
 #           legend = 'bottom')
 
+# ggarrange(plotlist = map_list_per_m,
+#           nrow = 2,
+#           ncol = 2,
+#           common.legend = T,
+#           legend = 'bottom')
+
+
 ```
 
 ```{r qrf-upl-map}
-map_list[["UpperLemhi_2018"]]
+map_list_per_m[["UpperLemhi_2018"]]
 ```
 
 ```{r qrf-pah-map}
-map_list[["Pahsimeroi_2018"]]
+map_list_per_m[["Pahsimeroi_2018"]]
 ```
 
 ```{r qrf-lwl-map}
-map_list[["LowerLemhi_2018"]]
+map_list_per_m[["LowerLemhi_2018"]]
 ```
 
 ```{r qrf-usl-map}
-map_list[["UpperSalmon_2018"]]
+map_list_per_m[["UpperSalmon_2018"]]
 ```
 
 Here are some options to help understand what factors are driving high or low capacity within each MRA reach.
@@ -795,15 +837,27 @@ xy_plot_all = pred_df %>%
               filter(Species == 'Chinook')) %>%
   mutate_at(vars(Metric, Name),
             list(~ fct_reorder(., desc(relImp)))) %>%
+  mutate(Name = recode(Name,
+                       'Substrate Est: Coarse and Fine Gravel' = 'Percent Gravel',
+                       'Sinuosity Via Centerline' = 'Sinuosity',
+                       'Wetted Side Channel Percent By Area' = 'Percent Side Channel',
+                       'Percent Undercut by Length' = 'Percent Undercut',
+                       'Wetted Width Integrated' = 'Wetted Width',
+                       'Avg. August Temperature' = 'Avg. August Temp.',
+                       'Wetted Channel Braidedness' = 'Braidedness',
+                       'Large Wood Volume: Wetted' = 'LWD Frequency')) %>%
   ggplot(aes(x = value,
              y = chnk_per_m2)) +
   geom_smooth() +
   geom_point(aes(color = Site)) +
   scale_color_brewer(palette = 'Set1') +
   facet_wrap(~ Name,
-             scales = 'free') +
-  labs(x = 'Metric Value',
-       y = expression('Chinook per'~m^2))
+             scales = 'free',
+             ncol = 3) +
+  theme(legend.position = 'bottom',
+        strip.text = element_text(size = 8)) +
+  labs(x = 'Habitat Metric Value',
+       y = expression('Capacity (Chinook per'~m^2~")"))
 
 box_plot_all = pred_df %>%
   gather(Metric, value, -c(Site:Area_Wet), -starts_with("chnk")) %>%
