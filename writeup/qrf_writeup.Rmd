@@ -66,6 +66,7 @@ library(kableExtra)
 ```{r}
 # load needed packages
 library(tidyverse)
+library(magrittr)
 library(sf)
 library(QRFcapacity)
 library(janitor)
