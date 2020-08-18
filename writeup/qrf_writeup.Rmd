@@ -70,6 +70,8 @@ library(sf)
 library(QRFcapacity)
 library(janitor)
 library(ggpubr)
+library(magrittr)
+library(quantregForest)
 
 theme_set(theme_bw())
 ```
@@ -79,13 +81,13 @@ theme_set(theme_bw())
 load('../data/qrf/qrf_juv_summer_dash.rda')
 
 # DASH data from 2018
-load('../data/dash/dash2018_fr.rda')
+load('../data/dash/dash2018_hr.rda')
 
 # geomorphic polygons
 lem_geo_rch = st_read('../data/geo_reaches/Lem_Poly_Label.shp',
                       quiet = T) %>%
   mutate(GeoReach = factor(Name,
-                           levels = paste0("GR_", 1:nlevels(Name)))) %>%
+                           levels = paste0("GR_", 1:n_distinct(Name)))) %>%
   select(-Name)
 
 pah_geo_rch = st_read('../data/geo_reaches/Pah_Poly_Label.shp',
@@ -110,40 +112,37 @@ cap_pts = st_read('../data/qrf/UpperSalmon_MastPts_Cap_juv_summer_dash.gpkg',
 ```
 
 ```{r cap-pred-mra-rchs} 
-pred_sf = dash2018_fr %>%
+pred_sf = dash2018_hr_gaa %>%
   ungroup() %>%
-  rename(avg_aug_temp = S2_02_11,
+  rename(avg_aug_temp = S2_02_11.y,
          LWVol_Wet = Wod_Vlm,
-         Q = MeanU_v1,
-         Sin_CL = sin,
-         SlowWater_Pct = Slowwat_Pct,
+         # Q = MeanU_v1,
+         Sin_CL = sinuosity,
+         SlowWater_Pct = Slowwater_Pct,
          SubEstGrvl = Prc_Grv,
          WetBraid = wet_braid,
          WetSC_Pct = SC_Pct,
-         Lgth_Wet = Length,
-         Area_Wet = SHAPE_A) %>%
-  mutate(FishCovSome = 100 - FishCovNone,
-         UcutLgth_Pct = Undrc_L / Lgth_Wet,
-         WetWdth_Int = Area_Wet / Lgth_Wet) %>%
-  mutate(Hab_Roll = if_else(SiteNam == 'Pahsimeroi_2018' & is.na(Hab_Roll),
-                            0,
-                            Hab_Roll)) %>%
+         Lgth_Wet = Length.x,
+         Area_Wet = SHAPE_A,
+         FishCovSome = Tot_Cov) %>%
+  mutate_at(vars(avg_aug_temp),
+            list(~ as.numeric(as.character(.)))) %>%
+  mutate(UcutLgth_Pct = Undrc_L / Lgth_Wet,
+         WetWdth_Int = Area_Wet / Lgth_Wet,
+         CU_Freq = CU_Cnt / Lgth_Wet * 100) %>%
   mutate_at(vars(SlowWater_Pct, WetSC_Pct),
             list(~ if_else(is.na(.), 0, .))) %>%
-  mutate_at(vars(SlowWater_Pct, 
-                 WetSC_Pct),
-            list(~ .* 100)) %>%
   # convert discharge from cfs to m3/s
-  mutate_at(vars(Q),
+  mutate_at(vars(Q = MeanU_v1),
             list(measurements::conv_unit),
             from = "ft3_per_sec",
             to = "m3_per_sec") %>%
   select(Site = SiteNam,
-         Hab_Roll,
+         Hab_Rch,
          Lgth_Wet,
          Area_Wet,
          one_of(unique(sel_hab_mets$Metric))) %>%
-  filter(!is.na(Hab_Roll)) %>%
+  filter(!is.na(Hab_Rch)) %>%
   filter(!is.na(Sin_CL))
 
 pred_df = pred_sf %>%
@@ -155,6 +154,7 @@ pred_quant = 0.9
 
 # make predictions at every hab_roll reach
 pred_df %<>%
+  na.omit() %>%
   mutate(chnk_per_m = predict(qrf_mods[['Chinook']],
                               newdata = select(., one_of(unique(sel_hab_mets$Metric))),
                               what = pred_quant),
@@ -163,12 +163,46 @@ pred_df %<>%
 
 pred_sf %<>%
   left_join(pred_df %>%
-              select(Site, Hab_Roll,
+              select(Site, Hab_Rch,
                      starts_with('chnk_per')))
 
-# save(pred_sf,
-#      file = "../data/qrf/mra_preds.rda")
+```
 
+```{r save-qrf-preds}
+# need to split back into lines and polygons to save
+# save polygons
+pred_sf %>%
+  group_by(Site, Hab_Rch) %>%
+  nest() %>%
+  mutate(cast_data = map(data,
+                         .f = st_cast)) %>%
+  select(-data) %>%
+  unnest(cols = cast_data) %>%
+  ungroup() %>%
+  st_as_sf() %>%
+  mutate(geom_type = st_geometry_type(.)) %>%
+  filter(geom_type %in% c("POLYGON", "MULTIPOLYGON")) %>%
+  select(-geom_type) %>%
+  st_write("../data/qrf/mra_preds_poly.gpkg",
+           append = F,
+           quiet = T)
+
+# save lines
+pred_sf %>%
+  group_by(Site, Hab_Rch) %>%
+  nest() %>%
+  mutate(cast_data = map(data,
+                         .f = st_cast)) %>%
+  select(-data) %>%
+  unnest(cols = cast_data) %>%
+  ungroup() %>%
+  st_as_sf() %>%
+  mutate(geom_type = st_geometry_type(.)) %>%
+  filter(!geom_type %in% c("POLYGON", "MULTIPOLYGON")) %>%
+  select(-geom_type) %>%
+  st_write("../data/qrf/mra_preds_line.gpkg",
+           append = F,
+           quiet = T)
 ```
 
 
@@ -776,15 +810,15 @@ bar_plot_list = pred_df %>%
   map(.f = function(x) {
     x %>%
       gather(Metric, value, -c(Site:Area_Wet), -starts_with("chnk")) %>%
-      mutate_at(vars(Hab_Roll),
+      mutate_at(vars(Hab_Rch),
                 list(as.factor)) %>%
-      mutate(Hab_Roll = fct_reorder(Hab_Roll,
+      mutate(Hab_Rch = fct_reorder(Hab_Rch,
                                     chnk_per_m2)) %>%
       left_join(rel_imp_df %>%
               filter(Species == 'Chinook')) %>%
       mutate_at(vars(Metric, Name),
                 list(~ fct_reorder(., desc(relImp)))) %>%
-      ggplot(aes(x = Hab_Roll,
+      ggplot(aes(x = Hab_Rch,
                  y = value,
                  fill = chnk_per_m2)) +
       geom_col() +
@@ -802,9 +836,9 @@ xy_plot_list = pred_df %>%
   map(.f = function(x) {
     x %>%
       gather(Metric, value, -c(Site:Area_Wet), -starts_with("chnk")) %>%
-  mutate_at(vars(Hab_Roll),
+  mutate_at(vars(Hab_Rch),
             list(as.factor)) %>%
-  mutate(Hab_Roll = fct_reorder(Hab_Roll,
+  mutate(Hab_Rch = fct_reorder(Hab_Rch,
                                 chnk_per_m2)) %>%
   left_join(rel_imp_df %>%
               filter(Species == 'Chinook')) %>%
@@ -829,9 +863,9 @@ for(nm in names(bar_plot_list)) {
 
 xy_plot_all = pred_df %>%
   gather(Metric, value, -c(Site:Area_Wet), -starts_with("chnk")) %>%
-  mutate_at(vars(Hab_Roll),
+  mutate_at(vars(Hab_Rch),
             list(as.factor)) %>%
-  mutate(Hab_Roll = fct_reorder(Hab_Roll,
+  mutate(Hab_Rch = fct_reorder(Hab_Rch,
                                 chnk_per_m2)) %>%
   left_join(rel_imp_df %>%
               filter(Species == 'Chinook')) %>%
@@ -861,9 +895,9 @@ xy_plot_all = pred_df %>%
 
 box_plot_all = pred_df %>%
   gather(Metric, value, -c(Site:Area_Wet), -starts_with("chnk")) %>%
-  mutate_at(vars(Hab_Roll),
+  mutate_at(vars(Hab_Rch),
             list(as.factor)) %>%
-  mutate(Hab_Roll = fct_reorder(Hab_Roll,
+  mutate(Hab_Rch = fct_reorder(Hab_Rch,
                                 chnk_per_m2)) %>%
   left_join(rel_imp_df %>%
               filter(Species == 'Chinook')) %>%
