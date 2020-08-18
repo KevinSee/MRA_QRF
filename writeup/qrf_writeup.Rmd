@@ -114,6 +114,9 @@ cap_pts = st_read('../data/qrf/UpperSalmon_MastPts_Cap_juv_summer_dash.gpkg',
 ```{r cap-pred-mra-rchs} 
 pred_sf = dash2018_hr_gaa %>%
   ungroup() %>%
+  # group_by(SiteNam, Hab_Rch) %>%
+  # slice(1) %>%
+  # ungroup() %>%
   rename(avg_aug_temp = S2_02_11.y,
          LWVol_Wet = Wod_Vlm,
          # Q = MeanU_v1,
@@ -165,6 +168,14 @@ pred_sf %<>%
   left_join(pred_df %>%
               select(Site, Hab_Rch,
                      starts_with('chnk_per')))
+
+# pred_sf %>%
+#   slice(unique(which(is.na(pred_sf), T)[,1])) %>%
+#   select(Site, Hab_Rch,
+#          LWVol_Wet,
+#          SubEstGrvl,
+#          UcutLgth_Pct) %>%
+#   arrange(Site, Hab_Rch)
 
 ```
 
