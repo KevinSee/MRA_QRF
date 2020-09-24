@@ -904,6 +904,21 @@ xy_plot_all = pred_df %>%
   labs(x = 'Habitat Metric Value',
        y = expression('Capacity (Chinook per'~m^2~")"))
 
+box_plot_fnames = c(
+  `Avg. August Temperature` = "Avg. August Temperature",
+  `Channel Unit Frequency` = "Channel Unit Frequency",
+  `Fish Cover: Some Cover` = "Fish Cover: Some Cover",
+  `Large Wood Volume: Wetted` = "Large Wood\nVolume: Wetted",
+  `Discharge` = "Discharge",
+  `Sinuosity Via Centerline` = "Sinuosity via Centerline",
+  `Slow Water Percent` = "Slow Water Percent",
+  `Substrate Est: Coarse and Fine Gravel` = "Substrate Est:\nCoarse and Fine Gravel",
+  `Percent Undercut by Length` = "Percent Undercut by Length",
+  `Wetted Channel Braidedness` = "Wetted Channel\nBraidedness",
+  `Wetted Side Channel Percent By Area` = "Wetted Side Channel\nPercent By Area",
+  `Wetted Width Integrated` = "Wetted Width Integrated"
+)
+
 box_plot_all = pred_df %>%
   gather(Metric, value, -c(Site:Area_Wet), -starts_with("chnk")) %>%
   mutate_at(vars(Hab_Rch),
@@ -928,7 +943,8 @@ box_plot_all = pred_df %>%
                        name = expression('Avg. Chinook per'~m^2)) +
   # scale_fill_brewer(palette = 'Set1') +
   facet_wrap(~ Name,
-             scales = 'free_y') +
+             scales = 'free_y',
+             labeller = labeller(Name = as_labeller(box_plot_fnames))) +
   theme(axis.text.x = element_text(angle = 45,
                                    hjust = 1),
         legend.position = "bottom") +
