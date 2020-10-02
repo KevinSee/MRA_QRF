@@ -383,7 +383,7 @@ chnk_maps = cap_pts %>%
     strm_lines = QRFcapacity::get_flowlines(stream_order = 2,
                                             wtsd_polygon = wtsd_bndry) %>%
       st_transform(st_crs(x)) %>%
-      filter(grepl(unique(x$HUC_8), reachcode))
+      filter(grepl(unique(x$HUC_8), REACHCODE))
     
     x %>%
       ggplot() +
@@ -419,7 +419,7 @@ sthd_maps = cap_pts %>%
     strm_lines = QRFcapacity::get_flowlines(stream_order = 2,
                                             wtsd_polygon = wtsd_bndry) %>%
       st_transform(st_crs(x)) %>%
-      filter(grepl(unique(x$HUC_8), reachcode))
+      filter(grepl(unique(x$HUC_8), REACHCODE))
     
     x %>%
       ggplot() +
