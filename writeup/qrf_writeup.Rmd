@@ -574,7 +574,7 @@ gr_cap_df %>%
 ```
 
 
-```{r lem-map, fig.cap = "Geomorphic reaches in the Lemhi colored by average capacity (fish per m)."}
+```{r lem-map, fig.cap = "Geomorphic reaches in the Lemhi colored by average capacity (fish per m^2)."}
 lem_chnk_map = gr_cap$Lemhi %>%
   group_by(GeoReach) %>%
   summarise_at(vars(matches('per_m')),
@@ -624,7 +624,7 @@ ggarrange(plotlist = list(lem_chnk_map,
 
 ```
 
-```{r pah-map, fig.cap = "Geomorphic reaches in the Pahsimeroi colored by average capacity (fish per m)."}
+```{r pah-map, fig.cap = "Geomorphic reaches in the Pahsimeroi colored by average capacity (fish per m^2)."}
 pah_chnk_map = gr_cap$Pahsimeroi %>%
   group_by(GeoReach) %>%
   summarise_at(vars(matches('per_m')),
@@ -674,7 +674,7 @@ ggarrange(plotlist = list(pah_chnk_map,
 
 ```
 
-```{r ups-map, fig.cap = "Geomorphic reaches in the upper Salmon colored by average capacity (fish per m)."}
+```{r ups-map, fig.cap = "Geomorphic reaches in the upper Salmon colored by average capacity (fish per m^2)."}
 ups_chnk_map = gr_cap$`Upper Salmon` %>%
   group_by(GeoReach) %>%
   summarise_at(vars(matches('per_m')),
