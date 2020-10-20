@@ -101,14 +101,24 @@ ups_geo_rch = st_read('../data/geo_reaches/US_Poly_Label.shp',
                            levels = paste0("GR-", 4:10)))
 
 # QRF extrapolations in Salmon subbasin on 200 m reaches
-salm_cap = st_read('../data/qrf/salmon_cap.gpkg',
-                   quiet = T) %>%
-  st_transform(st_crs(lem_geo_rch))
+# salm_cap = st_read('../data/qrf/salmon_cap.gpkg',
+#                    quiet = T) %>%
+#   st_transform(st_crs(lem_geo_rch))
+
+rch_cap = st_read('../data/qrf/UpperSalmon_Rch200_Cap_juv_summer_dash.gpkg',
+                  quiet = T) %>%
+  st_transform(st_crs(lem_geo_rch)) %>%
+  mutate(chnk_tot = chnk_per_m * reach_leng,
+         chnk_tot_se = chnk_per_m_se * reach_leng,
+         sthd_tot = sthd_per_m * reach_leng,
+         sthd_tot_se = sthd_per_m_se * reach_leng)
+
 
 # QRF extrapolations in Salmon subbasin on master sample points
 cap_pts = st_read('../data/qrf/UpperSalmon_MastPts_Cap_juv_summer_dash.gpkg',
                   quiet = T) %>%
   st_transform(st_crs(lem_geo_rch))
+
 ```
 
 ```{r cap-pred-mra-rchs} 
@@ -367,7 +377,7 @@ We used the QRF model to predict capacity at MRA sites that were sampled with DA
 
 ## Watershed Maps
 
-```{r wtsd_maps}
+```{r wtsd_maps, eval = F}
 # Chinook
 chnk_maps = cap_pts %>%
   filter(!is.na(chnk_use)) %>%
@@ -440,6 +450,84 @@ for(nm in names(sthd_maps)) {
 
 ```
 
+```{r wtsd_maps_rch}
+chnk_maps = rch_cap %>%
+  split(list(.$HUC8_code)) %>%
+  map(.f = function(x) {
+    wtsd_bndry = x %>%
+      filter(sthd | chnk) %>%
+      st_union() %>%
+      st_convex_hull()
+    
+    strm_lines = QRFcapacity::get_flowlines(stream_order = 2,
+                                            wtsd_polygon = wtsd_bndry) %>%
+      st_transform(st_crs(x)) %>%
+      filter(grepl(unique(x$HUC8_code), REACHCODE))
+    
+    x %>%
+      filter(chnk) %>%
+      ggplot() +
+      geom_sf(data = strm_lines,
+              color = "lightblue") +
+      geom_sf(aes(fill = chnk_per_m2,
+                  color = chnk_per_m2),
+              lwd = 1) +
+      scale_color_viridis_c(direction = -1,
+                       name = expression('Chinook per'~m^2)) +
+      scale_fill_viridis_c(direction = -1,
+                       name = expression('Chinook per'~m^2)) +
+      theme(axis.text.x = element_text(angle = -45, vjust = 0),
+            axis.title.x = element_blank(),
+            axis.title.y = element_blank(),
+            legend.position = "bottom")
+  })
+names(chnk_maps) = c('Upper Salmon',
+                     'Pahsimeroi',
+                     'Lemhi')
+for(nm in names(chnk_maps)) {
+  chnk_maps[[nm]] = chnk_maps[[nm]] +
+    labs(title = nm)
+}
+
+sthd_maps = rch_cap %>%
+  split(list(.$HUC8_code)) %>%
+  map(.f = function(x) {
+    wtsd_bndry = x %>%
+      filter(sthd | chnk) %>%
+      st_union() %>%
+      st_convex_hull()
+    
+    strm_lines = QRFcapacity::get_flowlines(stream_order = 2,
+                                            wtsd_polygon = wtsd_bndry) %>%
+      st_transform(st_crs(x)) %>%
+      filter(grepl(unique(x$HUC8_code), REACHCODE))
+    
+    x %>%
+      filter(sthd) %>%
+      ggplot() +
+      geom_sf(data = strm_lines,
+              color = "lightblue") +
+      geom_sf(aes(fill = sthd_per_m2,
+                  color = sthd_per_m2),
+              lwd = 1) +
+      scale_color_viridis_c(direction = -1,
+                       name = expression('Steelhead per'~m^2)) +
+      scale_fill_viridis_c(direction = -1,
+                       name = expression('Steelhead per'~m^2)) +
+      theme(axis.text.x = element_text(angle = -45, vjust = 0),
+            axis.title.x = element_blank(),
+            axis.title.y = element_blank(),
+            legend.position = "bottom")
+  })
+names(sthd_maps) = c('Upper Salmon',
+                     'Pahsimeroi',
+                     'Lemhi')
+for(nm in names(sthd_maps)) {
+  sthd_maps[[nm]] = sthd_maps[[nm]] +
+    labs(title = nm)
+}
+```
+
 ```{r chnk_map_lem}
 chnk_maps[["Lemhi"]]
 ```
@@ -477,54 +565,54 @@ geo_rch_list = list("Lemhi" = lem_geo_rch %>%
                     "Upper Salmon" = ups_geo_rch %>%
                       mutate(Watershed = 'Upper Salmon'))
 
-# # uses extrapolation estimates from Morgan's 200 m reaches
-# gr_cap = geo_rch_list %>%
-#   map(.f = function(x) {
-#     x %>%
-#       st_join(salm_cap %>%
-#             filter(sthd) %>%
-#             select(UniqueID, 
-#                    GNIS_Name,
-#                    model,
-#                    matches('sthd_per'), 
-#                    matches('sthd_tot')) %>%
-#             full_join(salm_cap %>%
-#                         filter(chnk) %>%
-#                         st_drop_geometry() %>%
-#                         select(UniqueID, 
-#                                GNIS_Name,
-#                                model,
-#                                matches('chnk_per'), 
-#                                matches('chnk_tot')))) %>%
-#       filter((Watershed == 'Lemhi' & GNIS_Name == 'Lemhi River') |
-#                (Watershed == 'Pahsimeroi' & GNIS_Name == 'Pahsimeroi River') |
-#                (Watershed == 'Upper Salmon' & GNIS_Name == 'Salmon River')) %>%
-#       mutate(rch_num = str_extract(GeoReach, '[:digit:]+'),
-#              rch_num = as.numeric(rch_num),
-#              GeoReach = str_replace(GeoReach, '_', '-')) %>%
-#       mutate(GeoReach = factor(GeoReach,
-#                            levels = paste0("GR-", min(rch_num):max(rch_num))))
-#   })
-
-# uses extrapolation from master sample points
+# uses extrapolation estimates from Morgan's 200 m reaches
 gr_cap = geo_rch_list %>%
   map(.f = function(x) {
     x %>%
-      st_join(cap_pts %>%
-                filter(!is.na(sthd_use)) %>%
-                select(Site, 
-                       matches('sthd_per')) %>%
-                full_join(cap_pts %>%
-                            filter(!is.na(chnk_use)) %>%
+      st_join(rch_cap %>%
+                filter(sthd) %>%
+                select(UniqueID,
+                       GNIS_Name,
+                       model,
+                       matches('sthd_per'),
+                       matches('sthd_tot')) %>%
+                full_join(rch_cap %>%
+                            filter(chnk) %>%
                             st_drop_geometry() %>%
-                            select(Site,
-                                   matches('chnk_per')))) %>%
+                            select(UniqueID,
+                                   GNIS_Name,
+                                   model,
+                                   matches('chnk_per'),
+                                   matches('chnk_tot')))) %>%
+      # filter((Watershed == 'Lemhi' & GNIS_Name == 'Lemhi River') |
+      #          (Watershed == 'Pahsimeroi' & GNIS_Name == 'Pahsimeroi River') |
+      #          (Watershed == 'Upper Salmon' & GNIS_Name == 'Salmon River')) %>%
       mutate(rch_num = str_extract(GeoReach, '[:digit:]+'),
              rch_num = as.numeric(rch_num),
              GeoReach = str_replace(GeoReach, '_', '-')) %>%
       mutate(GeoReach = factor(GeoReach,
-                               levels = paste0("GR-", min(rch_num):max(rch_num))))
+                           levels = paste0("GR-", min(rch_num):max(rch_num))))
   })
+
+# # uses extrapolation from master sample points
+# gr_cap = geo_rch_list %>%
+#   map(.f = function(x) {
+#     x %>%
+#       st_join(cap_pts %>%
+#                 filter(!is.na(sthd_use)) %>%
+#                 select(Site, 
+#                        matches('sthd_per')) %>%
+#                 full_join(cap_pts %>%
+#                             filter(!is.na(chnk_use)) %>%
+#                             st_drop_geometry() %>%
+#                             select(Site,
+#                                    matches('chnk_per')))) %>%
+#       mutate(rch_num = str_extract(GeoReach, '[:digit:]+'),
+#              rch_num = as.numeric(rch_num),
+#              GeoReach = str_replace(GeoReach, '_', '-')) %>%
+#       mutate(GeoReach = factor(GeoReach,
+#                                levels = paste0("GR-", min(rch_num):max(rch_num))))
+#   })
 
 # put into data.frame
 gr_cap_df = gr_cap %>%
@@ -816,6 +904,23 @@ map_list_per_m[["UpperSalmon_2018"]]
 Here are some options to help understand what factors are driving high or low capacity within each MRA reach.
 
 ```{r cap-eda-figs}
+# better labels for facetting
+fnames = c(
+  `Avg. August Temperature` = "Avg. August Temperature",
+  `Channel Unit Frequency` = "Channel Unit Frequency",
+  `Fish Cover: Some Cover` = "Fish Cover: Some Cover",
+  `Large Wood Volume: Wetted` = "Large Wood\nVolume: Wetted",
+  `Discharge` = "Discharge",
+  `Sinuosity Via Centerline` = "Sinuosity via Centerline",
+  `Slow Water Percent` = "Slow Water Percent",
+  `Substrate Est: Coarse and Fine Gravel` = "Substrate Est:\nCoarse and Fine Gravel",
+  `Percent Undercut by Length` = "Percent Undercut by Length",
+  `Wetted Channel Braidedness` = "Wetted Channel\nBraidedness",
+  `Wetted Side Channel Percent By Area` = "Wetted Side Channel\nPercent By Area",
+  `Wetted Width Integrated` = "Wetted Width Integrated"
+)
+
+
 bar_plot_list = pred_df %>%
   split(list(.$Site)) %>%
   map(.f = function(x) {
@@ -826,7 +931,7 @@ bar_plot_list = pred_df %>%
       mutate(Hab_Rch = fct_reorder(Hab_Rch,
                                     chnk_per_m2)) %>%
       left_join(rel_imp_df %>%
-              filter(Species == 'Chinook')) %>%
+                  filter(Species == 'Chinook')) %>%
       mutate_at(vars(Metric, Name),
                 list(~ fct_reorder(., desc(relImp)))) %>%
       ggplot(aes(x = Hab_Rch,
@@ -835,7 +940,8 @@ bar_plot_list = pred_df %>%
       geom_col() +
       scale_fill_viridis_c(direction = -1) +
       facet_wrap(~ Name,
-                 scales = 'free_y') +
+                 scales = 'free_y',
+                 labeller = labeller(Name = as_labeller(fnames))) +
       theme(legend.position = "bottom") +
       labs(x = 'Habitat Reach',
            y = 'Metric Value',
@@ -860,7 +966,8 @@ xy_plot_list = pred_df %>%
   geom_smooth() +
   geom_point() +
   facet_wrap(~ Name,
-             scales = 'free') +
+             scales = 'free',
+             labeller = labeller(Name = as_labeller(fnames))) +
   labs(x = 'Metric Value',
        y = expression('Chinook per'~m^2))
   })
@@ -882,15 +989,15 @@ xy_plot_all = pred_df %>%
               filter(Species == 'Chinook')) %>%
   mutate_at(vars(Metric, Name),
             list(~ fct_reorder(., desc(relImp)))) %>%
-  mutate(Name = recode(Name,
-                       'Substrate Est: Coarse and Fine Gravel' = 'Percent Gravel',
-                       'Sinuosity Via Centerline' = 'Sinuosity',
-                       'Wetted Side Channel Percent By Area' = 'Percent Side Channel',
-                       'Percent Undercut by Length' = 'Percent Undercut',
-                       'Wetted Width Integrated' = 'Wetted Width',
-                       'Avg. August Temperature' = 'Avg. August Temp.',
-                       'Wetted Channel Braidedness' = 'Braidedness',
-                       'Large Wood Volume: Wetted' = 'LWD Frequency')) %>%
+  # mutate(Name = recode(Name,
+  #                      'Substrate Est: Coarse and Fine Gravel' = 'Percent Gravel',
+  #                      'Sinuosity Via Centerline' = 'Sinuosity',
+  #                      'Wetted Side Channel Percent By Area' = 'Percent Side Channel',
+  #                      'Percent Undercut by Length' = 'Percent Undercut',
+  #                      'Wetted Width Integrated' = 'Wetted Width',
+  #                      'Avg. August Temperature' = 'Avg. August Temp.',
+  #                      'Wetted Channel Braidedness' = 'Braidedness',
+  #                      'Large Wood Volume: Wetted' = 'LWD Frequency')) %>%
   ggplot(aes(x = value,
              y = chnk_per_m2)) +
   geom_smooth() +
@@ -898,26 +1005,13 @@ xy_plot_all = pred_df %>%
   scale_color_brewer(palette = 'Set1') +
   facet_wrap(~ Name,
              scales = 'free',
+             labeller = labeller(Name = as_labeller(fnames)),
              ncol = 3) +
   theme(legend.position = 'bottom',
         strip.text = element_text(size = 8)) +
   labs(x = 'Habitat Metric Value',
        y = expression('Capacity (Chinook per'~m^2~")"))
 
-box_plot_fnames = c(
-  `Avg. August Temperature` = "Avg. August Temperature",
-  `Channel Unit Frequency` = "Channel Unit Frequency",
-  `Fish Cover: Some Cover` = "Fish Cover: Some Cover",
-  `Large Wood Volume: Wetted` = "Large Wood\nVolume: Wetted",
-  `Discharge` = "Discharge",
-  `Sinuosity Via Centerline` = "Sinuosity via Centerline",
-  `Slow Water Percent` = "Slow Water Percent",
-  `Substrate Est: Coarse and Fine Gravel` = "Substrate Est:\nCoarse and Fine Gravel",
-  `Percent Undercut by Length` = "Percent Undercut by Length",
-  `Wetted Channel Braidedness` = "Wetted Channel\nBraidedness",
-  `Wetted Side Channel Percent By Area` = "Wetted Side Channel\nPercent By Area",
-  `Wetted Width Integrated` = "Wetted Width Integrated"
-)
 
 box_plot_all = pred_df %>%
   gather(Metric, value, -c(Site:Area_Wet), -starts_with("chnk")) %>%
@@ -944,7 +1038,7 @@ box_plot_all = pred_df %>%
   # scale_fill_brewer(palette = 'Set1') +
   facet_wrap(~ Name,
              scales = 'free_y',
-             labeller = labeller(Name = as_labeller(box_plot_fnames))) +
+             labeller = labeller(Name = as_labeller(fnames))) +
   theme(axis.text.x = element_text(angle = 45,
                                    hjust = 1),
         legend.position = "bottom") +
