@@ -136,10 +136,10 @@ pred_sf = dash2018_hr_gaa %>%
   mutate_at(vars(SlowWater_Pct, WetSC_Pct),
             list(~ if_else(is.na(.), 0, .))) %>%
   # convert discharge from cfs to m3/s
-  mutate_at(vars(Q = MeanU_v1),
-            list(measurements::conv_unit),
-            from = "ft3_per_sec",
-            to = "m3_per_sec") %>%
+  # mutate_at(vars(Q = MeanU_v1),
+  #           list(measurements::conv_unit),
+  #           from = "ft3_per_sec",
+  #           to = "m3_per_sec") %>%
   select(Site = SiteNam,
          Hab_Rch,
          Lgth_Wet,
