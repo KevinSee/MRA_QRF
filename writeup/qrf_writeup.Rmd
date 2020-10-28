@@ -127,7 +127,7 @@ pred_sf = dash2018_hr_gaa %>%
   # group_by(SiteNam, Hab_Rch) %>%
   # slice(1) %>%
   # ungroup() %>%
-  rename(avg_aug_temp = S2_02_11.y,
+  rename(avg_aug_temp = S2_02_11,
          LWVol_Wet = Wod_Vlm,
          # Q = MeanU_v1,
          Sin_CL = sinuosity,
@@ -942,7 +942,8 @@ bar_plot_list = pred_df %>%
       facet_wrap(~ Name,
                  scales = 'free_y',
                  labeller = labeller(Name = as_labeller(fnames))) +
-      theme(legend.position = "bottom") +
+      theme(legend.position = "bottom",
+            axis.text.x = element_blank()) +
       labs(x = 'Habitat Reach',
            y = 'Metric Value',
            fill = expression('Chinook per'~m^2))
