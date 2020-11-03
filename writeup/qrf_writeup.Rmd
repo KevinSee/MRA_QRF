@@ -473,9 +473,11 @@ chnk_maps = rch_cap %>%
                   color = chnk_per_m2),
               lwd = 1) +
       scale_color_viridis_c(direction = -1,
-                       name = expression('Chinook per'~m^2)) +
+                       name = expression('Chinook per'~m^2),
+                       breaks = scales::pretty_breaks(n = 3)) +
       scale_fill_viridis_c(direction = -1,
-                       name = expression('Chinook per'~m^2)) +
+                       name = expression('Chinook per'~m^2),
+                       breaks = scales::pretty_breaks(n = 3)) +
       theme(axis.text.x = element_text(angle = -45, vjust = 0),
             axis.title.x = element_blank(),
             axis.title.y = element_blank(),
@@ -511,9 +513,11 @@ sthd_maps = rch_cap %>%
                   color = sthd_per_m2),
               lwd = 1) +
       scale_color_viridis_c(direction = -1,
-                       name = expression('Steelhead per'~m^2)) +
+                       name = expression('Steelhead per'~m^2),
+                       breaks = scales::pretty_breaks(n = 3)) +
       scale_fill_viridis_c(direction = -1,
-                       name = expression('Steelhead per'~m^2)) +
+                       name = expression('Steelhead per'~m^2),
+                       breaks = scales::pretty_breaks(n = 3)) +
       theme(axis.text.x = element_text(angle = -45, vjust = 0),
             axis.title.x = element_blank(),
             axis.title.y = element_blank(),
@@ -661,155 +665,50 @@ gr_cap_df %>%
 
 ```
 
+```{r create-gr-maps}
+gr_maps = gr_cap %>%
+  map(.f = function(x) {
+    x %>%
+      group_by(GeoReach) %>%
+      summarise_at(vars(matches('per_m')),
+                   list(mean),
+                   na.rm = T) %>%
+      ungroup() %>%
+      pivot_longer(cols = matches('per_m'),
+                   names_to = "type",
+                   values_to = "avg_cap") %>%
+      st_as_sf() %>%
+      mutate(spp = if_else(grepl('^chnk', type),
+                           "Chinook",
+                           "Steelhead")) %>%
+      filter(grepl('per_m$', type)) %>%
+      ggplot() +
+      geom_sf(aes(fill = avg_cap)) +
+      scale_fill_viridis_c(direction = -1,
+                           name = expression('Capacity per'~m^2)) +
+      geom_sf_label(aes(label = str_remove(GeoReach, "^GR_")),
+                    size = 2,
+                    nudge_x = 3000,
+                    nudge_y = 500) +
+      theme(axis.text.x = element_text(angle = -45, vjust = 0),
+            axis.title.x = element_blank(),
+            axis.title.y = element_blank(),
+            legend.position = "bottom") +
+      facet_wrap(~ spp)
+  })
+```
+
 
 ```{r lem-map, fig.cap = "Geomorphic reaches in the Lemhi colored by average capacity (fish per m^2)."}
-lem_chnk_map = gr_cap$Lemhi %>%
-  group_by(GeoReach) %>%
-  summarise_at(vars(matches('per_m')),
-               list(mean),
-               na.rm = T) %>%
-  ungroup() %>%
-  ggplot() +
-  geom_sf(aes(fill = chnk_per_m2)) +
-  scale_fill_viridis_c(direction = -1,
-                       name = expression('Capacity per'~m^2)) +
-  geom_sf_label(aes(label = str_remove(GeoReach, "^GR_")),
-                size = 2,
-                nudge_x = 3000,
-                nudge_y = 500) +
-  theme(axis.text.x = element_text(angle = -45, vjust = 0),
-        axis.title.x = element_blank(),
-        axis.title.y = element_blank(),
-        legend.position = "bottom") +
-  labs(title = 'Chinook')
-
-lem_sthd_map = gr_cap$Lemhi %>%
-  group_by(GeoReach) %>%
-  summarise_at(vars(matches('per_m')),
-               list(mean),
-               na.rm = T) %>%
-  ungroup() %>%
-  ggplot() +
-  geom_sf(aes(fill = sthd_per_m2)) +
-  scale_fill_viridis_c(direction = -1,
-                       name = expression('Capacity per'~m^2)) +
-  geom_sf_label(aes(label = str_remove(GeoReach, "^GR_")),
-                size = 2,
-                nudge_x = 3000,
-                nudge_y = 500) +
-  theme(axis.text.x = element_text(angle = -45, vjust = 0),
-        axis.title.x = element_blank(),
-        axis.title.y = element_blank(),
-        legend.position = "bottom") +
-  labs(title = 'Steelhead')
-
-ggarrange(plotlist = list(lem_chnk_map,
-                          lem_sthd_map),
-          labels = 'AUTO',
-          nrow = 1,
-          common.legend = T,
-          legend = 'bottom')
-
+gr_maps$Lemhi
 ```
 
 ```{r pah-map, fig.cap = "Geomorphic reaches in the Pahsimeroi colored by average capacity (fish per m^2)."}
-pah_chnk_map = gr_cap$Pahsimeroi %>%
-  group_by(GeoReach) %>%
-  summarise_at(vars(matches('per_m')),
-               list(mean),
-               na.rm = T) %>%
-  ungroup() %>%
-  ggplot() +
-  geom_sf(aes(fill = chnk_per_m2)) +
-  scale_fill_viridis_c(direction = -1,
-                       name = expression('Capacity per'~m^2)) +
-  geom_sf_label(aes(label = str_remove(GeoReach, "^GR_")),
-                size = 2,
-                nudge_x = 3000,
-                nudge_y = 500) +
-  theme(axis.text.x = element_text(angle = -45, vjust = 0),
-        axis.title.x = element_blank(),
-        axis.title.y = element_blank(),
-        legend.position = "bottom") +
-  labs(title = 'Chinook')
-
-pah_sthd_map = gr_cap$Pahsimeroi %>%
-  group_by(GeoReach) %>%
-  summarise_at(vars(matches('per_m')),
-               list(mean),
-               na.rm = T) %>%
-  ungroup() %>%
-  ggplot() +
-  geom_sf(aes(fill = sthd_per_m2)) +
-  scale_fill_viridis_c(direction = -1,
-                       name = expression('Capacity per'~m^2)) +
-  geom_sf_label(aes(label = str_remove(GeoReach, "^GR_")),
-                size = 2,
-                nudge_x = 3000,
-                nudge_y = 500) +
-  theme(axis.text.x = element_text(angle = -45, vjust = 0),
-        axis.title.x = element_blank(),
-        axis.title.y = element_blank(),
-        legend.position = "bottom") +
-  labs(title = 'Steelhead')
-
-ggarrange(plotlist = list(pah_chnk_map,
-                          pah_sthd_map),
-          labels = 'AUTO',
-          nrow = 1,
-          legend = 'bottom',
-          common.legend = T)
-
+gr_maps$Pahsimeroi
 ```
 
 ```{r ups-map, fig.cap = "Geomorphic reaches in the upper Salmon colored by average capacity (fish per m^2)."}
-ups_chnk_map = gr_cap$`Upper Salmon` %>%
-  group_by(GeoReach) %>%
-  summarise_at(vars(matches('per_m')),
-               list(mean),
-               na.rm = T) %>%
-  ungroup() %>%
-  ggplot() +
-  geom_sf(aes(fill = chnk_per_m2)) +
-  scale_fill_viridis_c(direction = -1,
-                       name = expression('Capacity per'~m^2)) +
-  geom_sf_label(aes(label = str_remove(GeoReach, "^GR_")),
-                size = 2,
-                nudge_x = 3000,
-                nudge_y = 500) +
-  theme(axis.text.x = element_text(angle = -45, vjust = 0),
-        axis.title.x = element_blank(),
-        axis.title.y = element_blank(),
-        legend.position = "bottom") +
-  labs(title = 'Chinook')
-
-ups_sthd_map = gr_cap$`Upper Salmon` %>%
-  group_by(GeoReach) %>%
-  summarise_at(vars(matches('per_m')),
-               list(mean),
-               na.rm = T) %>%
-  ungroup() %>%
-  ggplot() +
-  geom_sf(aes(fill = sthd_per_m2)) +
-  scale_fill_viridis_c(direction = -1,
-                       name = expression('Capacity per'~m^2)) +
-  geom_sf_label(aes(label = str_remove(GeoReach, "^GR_")),
-                size = 2,
-                nudge_x = 3000,
-                nudge_y = 500) +
-  theme(axis.text.x = element_text(angle = -45, vjust = 0),
-        axis.title.x = element_blank(),
-        axis.title.y = element_blank(),
-        legend.position = "bottom") +
-  labs(title = 'Steelhead')
-
-ggarrange(plotlist = list(ups_chnk_map,
-                          ups_sthd_map),
-          labels = 'AUTO',
-          nrow = 1,
-          common.legend = T,
-          legend = 'bottom')
-
+gr_maps$`Upper Salmon`
 ```
 
 ## Capacity at MRA sites
