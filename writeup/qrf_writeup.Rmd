@@ -979,8 +979,7 @@ for(nm in names(bar_plot_list)) {
 }
 
 
-
-xy_plot_all = pred_df %>%
+xy_df = pred_df %>%
   gather(Metric, value, -c(Site:Area_Wet), -starts_with("chnk")) %>%
   mutate(Site = str_remove(Site, "_2018$"),
          Site = recode(Site,
@@ -994,19 +993,13 @@ xy_plot_all = pred_df %>%
   left_join(rel_imp_df %>%
               filter(Species == 'Chinook')) %>%
   mutate_at(vars(Metric, Name),
-            list(~ fct_reorder(., desc(relImp)))) %>%
-  # mutate(Name = recode(Name,
-  #                      'Substrate Est: Coarse and Fine Gravel' = 'Percent Gravel',
-  #                      'Sinuosity Via Centerline' = 'Sinuosity',
-  #                      'Wetted Side Channel Percent By Area' = 'Percent Side Channel',
-  #                      'Percent Undercut by Length' = 'Percent Undercut',
-  #                      'Wetted Width Integrated' = 'Wetted Width',
-  #                      'Avg. August Temperature' = 'Avg. August Temp.',
-  #                      'Wetted Channel Braidedness' = 'Braidedness',
-  #                      'Large Wood Volume: Wetted' = 'LWD Frequency')) %>%
+            list(~ fct_reorder(., desc(relImp))))
+
+xy_plot_all = xy_df %>%
   ggplot(aes(x = value,
              y = chnk_per_m2)) +
-  geom_smooth() +
+  geom_smooth(data = xy_df %>%
+                filter(!(Metric == "WetBraid" & value <= 1))) +
   geom_point(aes(color = Site)) +
   scale_color_brewer(palette = 'Set1',
                      guide = guide_legend(nrow = 1)) +
