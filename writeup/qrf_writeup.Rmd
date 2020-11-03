@@ -1024,7 +1024,7 @@ xy_plot_all = pred_df %>%
 ggsave(filename = paste0(knitr::opts_chunk$get("fig.path"), "cap_xy_fig.png"),
        xy_plot_all,
        width = 5.5,
-       height = 7)
+       height = 11)
 
 box_plot_all = pred_df %>%
   gather(Metric, value, -c(Site:Area_Wet), -starts_with("chnk")) %>%
