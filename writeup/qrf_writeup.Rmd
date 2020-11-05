@@ -189,7 +189,7 @@ pred_sf %<>%
 
 ```
 
-```{r save-qrf-preds}
+```{r save-qrf-preds, eval = F}
 # need to split back into lines and polygons to save
 # save polygons
 pred_sf %>%
