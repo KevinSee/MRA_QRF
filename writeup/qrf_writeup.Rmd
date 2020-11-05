@@ -677,15 +677,21 @@ gr_maps = gr_cap %>%
       pivot_longer(cols = matches('per_m'),
                    names_to = "type",
                    values_to = "avg_cap") %>%
-      st_as_sf() %>%
       mutate(spp = if_else(grepl('^chnk', type),
                            "Chinook",
                            "Steelhead")) %>%
+      group_by(spp, type) %>%
+      mutate(rel_cap = (avg_cap - min(avg_cap, na.rm = T)) / (max(avg_cap, na.rm = T) - min(avg_cap, na.rm = T))) %>%
+      ungroup() %>%
       filter(grepl('per_m$', type)) %>%
+      st_as_sf() %>%
       ggplot() +
-      geom_sf(aes(fill = avg_cap)) +
+      # geom_sf(aes(fill = avg_cap)) +
+      # scale_fill_viridis_c(direction = -1,
+      #                      name = expression('Capacity per'~m^2)) +
+      geom_sf(aes(fill = rel_cap)) +
       scale_fill_viridis_c(direction = -1,
-                           name = expression('Capacity per'~m^2)) +
+                           name = expression('Relative Capacity per'~m^2)) +
       geom_sf_label(aes(label = str_remove(GeoReach, "^GR_")),
                     size = 2,
                     nudge_x = 3000,
@@ -699,15 +705,15 @@ gr_maps = gr_cap %>%
 ```
 
 
-```{r lem-map, fig.cap = "Geomorphic reaches in the Lemhi colored by average capacity (fish per m^2)."}
+```{r lem-map, fig.cap = "Geomorphic reaches in the Lemhi colored by relative average capacity (fish per m^2)."}
 gr_maps$Lemhi
 ```
 
-```{r pah-map, fig.cap = "Geomorphic reaches in the Pahsimeroi colored by average capacity (fish per m^2)."}
+```{r pah-map, fig.cap = "Geomorphic reaches in the Pahsimeroi colored by relative average capacity (fish per m^2)."}
 gr_maps$Pahsimeroi
 ```
 
-```{r ups-map, fig.cap = "Geomorphic reaches in the upper Salmon colored by average capacity (fish per m^2)."}
+```{r ups-map, fig.cap = "Geomorphic reaches in the upper Salmon colored by relative average capacity (fish per m^2)."}
 gr_maps$`Upper Salmon`
 ```
 
