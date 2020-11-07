@@ -668,7 +668,7 @@ gr_cap_df %>%
 ```{r create-gr-maps}
 gr_maps = gr_cap %>%
   map(.f = function(x) {
-    x %>%
+    map_obj = x %>%
       group_by(GeoReach) %>%
       summarise_at(vars(matches('per_m')),
                    list(mean),
@@ -692,7 +692,7 @@ gr_maps = gr_cap %>%
       geom_sf(aes(fill = rel_cap)) +
       scale_fill_viridis_c(direction = -1,
                            name = 'Relative Capacity Score') +
-      geom_sf_label(aes(label = str_remove(GeoReach, "^GR_")),
+      geom_sf_label(aes(label = str_remove(GeoReach, "^GR-")),
                     size = 2,
                     nudge_x = 3000,
                     nudge_y = 500) +
@@ -701,6 +701,13 @@ gr_maps = gr_cap %>%
             axis.title.y = element_blank(),
             legend.position = "bottom") +
       facet_wrap(~ spp)
+    
+    if(unique(x$Watershed == "Upper Salmon")) {
+      map_obj = map_obj +
+        coord_sf(xlim = st_bbox(x)[c(1,3)] + c(0, 1500))
+    }
+    
+    return(map_obj)
   })
 ```
 
