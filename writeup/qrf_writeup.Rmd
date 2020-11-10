@@ -135,7 +135,7 @@ pred_sf = dash2018_hr_gaa %>%
          SubEstGrvl = Prc_Grv,
          WetBraid = wet_braid,
          WetSC_Pct = SC_Pct,
-         Lgth_Wet = Length.x,
+         Lgth_Wet = Total_Length,
          Area_Wet = SHAPE_A,
          FishCovSome = Tot_Cov) %>%
   mutate_at(vars(avg_aug_temp),
